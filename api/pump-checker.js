@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      if (changePercent >= 10) {
+      if (changePercent >= 1) {
         const msg = `🚀 *PUMP ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga Terbaru: *${lastPrice}*\n Harga Sebelumnya: *${prevPrice}* \n 📈 Naik: *${changePercent.toFixed(2)}%*`;
 
         for (const chatId of CHAT_IDS) {
