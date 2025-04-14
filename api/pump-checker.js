@@ -23,15 +23,10 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      if (changePercent >= 1 && !sentCoins.has(symbol)) {
-        const msg = `🚀 *KOIN NAIK CEPAT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga: *${lastPrice}*\n📈 Naik: *${changePercent.toFixed(2)}%*`;
-
-        for (const userId of users) {
-          await bot.sendMessage(userId, msg, { parse_mode: 'Markdown' });
-        }
-
-        result.push(symbol);
-        sentCoins.add(symbol);
+      if (changePercent >= 1) {
+        const msg = `🚀 PUMP ALERT\n\nKoin: ${symbol.toUpperCase()}\nHarga: ${lastPrice}\nNaik: ${changePercent.toFixed(2)}%`;
+        await bot.sendMessage(CHAT_ID, msg);
+        result.push(msg);
       }
 
       lastPrices[symbol] = lastPrice;
