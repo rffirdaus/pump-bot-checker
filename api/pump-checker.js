@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const TOKEN = "7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw";
-const bot = new TelegramBot(TOKEN, { polling: true }); // Pastikan polling diaktifkan
+const bot = new TelegramBot(TOKEN);
 
 let lastPrices = {};
 let sentCoins = new Set();
@@ -14,7 +14,6 @@ module.exports = async (req, res) => {
     const { data } = await axios.get('https://indodax.com/api/tickers');
     const tickers = data.tickers;
 
-    // Pastikan file users.json ada dan terisi dengan benar
     const users = JSON.parse(fs.readFileSync(path.resolve('./users.json')));
 
     let result = [];
@@ -24,23 +23,12 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      if (changePercent >= 1 && !sentCoins.has(symbol)) {
+      if (changePercent >= 10 && !sentCoins.has(symbol)) {
         const msg = `🚀 *KOIN NAIK CEPAT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga: *${lastPrice}*\n📈 Naik: *${changePercent.toFixed(2)}%*`;
 
         for (const userId of users) {
-          if (!userId) {
-            console.error('User ID is empty:', userId);
-            continue; // Skip this user
-          }
-        
-          try {
-            await bot.sendMessage(userId, msg, { parse_mode: 'Markdown' });
-            console.log(`Pesan terkirim ke pengguna ${userId}`);
-          } catch (err) {
-            console.error(`Gagal mengirim pesan ke ${userId}:`, err.message);
-          }
+          await bot.sendMessage(userId, msg, { parse_mode: 'Markdown' });
         }
-        
 
         result.push(symbol);
         sentCoins.add(symbol);
