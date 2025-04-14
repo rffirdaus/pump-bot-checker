@@ -22,8 +22,8 @@ module.exports = async (req, res) => {
       const lastPrice = parseFloat(ticker.last);
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
-      console.log(changePercent, 'suksesssss')
-      if (changePercent >= 10 && !sentCoins.has(symbol)) {
+
+      if (changePercent >= 1 && !sentCoins.has(symbol)) {
         const msg = `🚀 *KOIN NAIK CEPAT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga: *${lastPrice}*\n📈 Naik: *${changePercent.toFixed(2)}%*`;
 
         for (const userId of users) {
