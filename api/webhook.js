@@ -1,9 +1,9 @@
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
 const TELEGRAM_TOKEN = '7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
+
+let users = []; // hanya tersimpan saat instance aktif
 
 module.exports = async (req, res) => {
   try {
@@ -14,32 +14,24 @@ module.exports = async (req, res) => {
     const message = req.body.message;
 
     if (!message || !message.chat || !message.chat.id) {
+      console.log('Invalid message format:', JSON.stringify(req.body));
       return res.status(400).json({ message: 'Invalid message format' });
     }
 
     const chatId = message.chat.id;
-    const filePath = path.resolve('./users.json');
-    let users = [];
 
-    // Baca users.json kalau ada
-    if (fs.existsSync(filePath)) {
-      const fileContent = fs.readFileSync(filePath, 'utf-8');
-      users = JSON.parse(fileContent || '[]');
-    }
-
-    // Tambahkan chatId kalau belum ada
     if (!users.includes(chatId)) {
       users.push(chatId);
-      fs.writeFileSync(filePath, JSON.stringify(users, null, 2));
+      console.log(`✅ Registered new chatId: ${chatId}`);
     }
 
-    // Kirim pesan ke user
+    // Kirim pesan balasan
     await axios.post(`${TELEGRAM_API}/sendMessage`, {
       chat_id: chatId,
-      text: '✅ Kamu sudah terdaftar untuk menerima notifikasi pump coin.',
+      text: 'Halo! Kamu sudah terdaftar untuk notifikasi coin pump.',
     });
 
-    return res.status(200).json({ message: 'User registered', chatId });
+    return res.status(200).json({ message: 'Registered', chatId });
   } catch (err) {
     console.error('Webhook Error:', err.message);
     return res.status(500).json({ error: err.message });
