@@ -1,4 +1,3 @@
-import user from '../users.json'
 const axios = require('axios');
 
 const TELEGRAM_TOKEN = '7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw';
@@ -29,7 +28,7 @@ module.exports = async (req, res) => {
     // Kirim pesan balasan
     await axios.post(`${TELEGRAM_API}/sendMessage`, {
       chat_id: chatId,
-      text: `Halo! Kamu sudah terdaftar untuk notifikasi coin pump.${user}`,
+      text: 'Halo! Kamu sudah terdaftar untuk notifikasi coin pump.',
     });
 
     return res.status(200).json({ message: 'Registered', chatId });
