@@ -2,7 +2,7 @@ const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
 
 const TELEGRAM_TOKEN = "7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw";
-const CHAT_ID = "903532698";
+const CHAT_IDS = ["903532698", "1272569833"];
 const bot = new TelegramBot(TELEGRAM_TOKEN);
 
 let lastPrices = {};
@@ -19,9 +19,13 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      if (changePercent >= 10) {
-        const msg = `🚀 PUMP ALERT\n\nKoin: ${symbol.toUpperCase()}\nHarga: ${lastPrice}\nNaik: ${changePercent.toFixed(2)}%`;
-        await bot.sendMessage(CHAT_ID, msg);
+      if (changePercent >= 1) {
+        const msg = `🚀 *PUMP ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga: *${lastPrice}*\n📈 Naik: *${changePercent.toFixed(2)}%*`;
+
+        for (const chatId of CHAT_IDS) {
+          await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
+        }
+
         result.push(msg);
       }
 
