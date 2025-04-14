@@ -27,7 +27,6 @@ module.exports = async (req, res) => {
         const msg = `🚀 *KOIN NAIK CEPAT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga: *${lastPrice}*\n📈 Naik: *${changePercent.toFixed(2)}%*`;
 
         for (const userId of users) {
-          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
           await bot.sendMessage(userId, msg, { parse_mode: 'Markdown' });
         }
 
