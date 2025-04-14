@@ -4,8 +4,7 @@ const path = require('path');
 
 const TELEGRAM_TOKEN = '7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
-
-const USERS_FILE = path.resolve('./users.json');
+const USERS_FILE = path.resolve('./users.json'); // path file users.json
 
 module.exports = async (req, res) => {
   try {
@@ -24,23 +23,26 @@ module.exports = async (req, res) => {
     const text = message.text || '';
 
     if (text === '/start') {
-      // Baca data user yang sudah ada
+      // Load existing users
       let users = [];
       if (fs.existsSync(USERS_FILE)) {
         const raw = fs.readFileSync(USERS_FILE);
         users = JSON.parse(raw);
       }
 
-      // Tambahkan chatId jika belum ada
+      // Simpan jika belum ada
       if (!users.includes(chatId)) {
         users.push(chatId);
         fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+        console.log(`✅ chatId ${chatId} ditambahkan ke users.json`);
+      } else {
+        console.log(`ℹ️ chatId ${chatId} sudah terdaftar`);
       }
 
-      // Kirim balasan
+      // Kirim pesan ke user
       await axios.post(`${TELEGRAM_API}/sendMessage`, {
         chat_id: chatId,
-        text: '✅ Kamu berhasil berlangganan notifikasi *pump coin*!',
+        text: '✅ Kamu sekarang akan menerima notifikasi pump coin!',
         parse_mode: 'Markdown',
       });
     }
