@@ -28,6 +28,11 @@ module.exports = async (req, res) => {
         const msg = `🚀 *KOIN NAIK CEPAT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga: *${lastPrice}*\n📈 Naik: *${changePercent.toFixed(2)}%*`;
 
         for (const userId of users) {
+          if (!userId) {
+            console.error('User ID is empty:', userId);
+            continue; // Skip this user
+          }
+        
           try {
             await bot.sendMessage(userId, msg, { parse_mode: 'Markdown' });
             console.log(`Pesan terkirim ke pengguna ${userId}`);
@@ -35,6 +40,7 @@ module.exports = async (req, res) => {
             console.error(`Gagal mengirim pesan ke ${userId}:`, err.message);
           }
         }
+        
 
         result.push(symbol);
         sentCoins.add(symbol);
