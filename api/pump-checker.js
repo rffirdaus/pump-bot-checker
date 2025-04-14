@@ -25,7 +25,7 @@ module.exports = async (req, res) => {
 
       if (changePercent >= 1) {
         const msg = `🚀 PUMP ALERT\n\nKoin: ${symbol.toUpperCase()}\nHarga: ${lastPrice}\nNaik: ${changePercent.toFixed(2)}%`;
-        await bot.sendMessage(CHAT_ID, msg);
+        await bot.sendMessage(users, msg);
         result.push(msg);
       }
 
