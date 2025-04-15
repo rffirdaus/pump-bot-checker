@@ -1,5 +1,6 @@
 const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
+const { analyzeCoin } = require('./lib/analysis');  // Import fungsi analisis
 
 const TELEGRAM_TOKEN = "7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw";
 const CHAT_IDS = ["903532698", "1272569833"];
@@ -10,6 +11,8 @@ let lastVolumes = {};
 
 module.exports = async (req, res) => {
   try {
+    console.log('Bot is starting...');  // Log to indicate the bot is starting
+
     const { data } = await axios.get('https://indodax.com/api/tickers');
     const tickers = data.tickers;
 
@@ -24,7 +27,9 @@ module.exports = async (req, res) => {
       const prevVolume = lastVolumes[symbol] || lastVolume;
       const volumeChange = lastVolume - prevVolume;
 
-      // Check for price pump (10% or more increase)
+      console.log(`Checking ${symbol}: lastPrice=${lastPrice}, prevPrice=${prevPrice}, changePercent=${changePercent}%`);
+
+      // Cek jika ada pump (perubahan harga >= 10%)
       if (changePercent >= 10) {
         const msg = `🚀 *PUMP ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}* \n📈 Naik: *${changePercent.toFixed(2)}%*`;
 
@@ -35,7 +40,7 @@ module.exports = async (req, res) => {
         result.push(msg);
       }
 
-      // Check for large purchase (threshold: volume change greater than 5000)
+      // Cek pembelian besar (volume perubahan > 5000)
       if (volumeChange > 5000) {
         const volumeMsg = `💥 *LARGE PURCHASE ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n📊 Volume Terbaru: *${lastVolume}*\n📊 Volume Sebelumnya: *${prevVolume}*\n📈 Perubahan Volume: *${volumeChange}*`;
 
@@ -46,10 +51,22 @@ module.exports = async (req, res) => {
         result.push(volumeMsg);
       }
 
-      // Update prices and volumes for the next check
+      // Analisis koin menggunakan analysis.js
+      const analysisMessage = await analyzeCoin(symbol, ticker);
+      if (analysisMessage) {
+        for (const chatId of CHAT_IDS) {
+          await bot.sendMessage(chatId, analysisMessage, { parse_mode: "Markdown" });
+        }
+
+        result.push(analysisMessage);
+      }
+
+      // Update harga dan volume untuk pemeriksaan berikutnya
       lastPrices[symbol] = lastPrice;
       lastVolumes[symbol] = lastVolume;
     }
+
+    console.log('Process completed.');  // Log after process completes
 
     res.status(200).json({ status: 'ok', message: result });
   } catch (err) {
