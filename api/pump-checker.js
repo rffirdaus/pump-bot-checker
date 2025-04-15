@@ -60,12 +60,24 @@ async function getCoinAnalysis(symbol) {
 }
 
 // Command handler untuk memproses perintah /<coin>
+// Tanpa pemetaan manual, langsung mengonversi input ke simbol Indodax
 bot.onText(/\/(\w+)/, async (msg, match) => {
   const chatId = msg.chat.id;
-  const coinSymbol = match[1].toLowerCase() + 'idr';  // ubah ke format yang sesuai dengan API Indodax
+  const coinInput = match[1].toLowerCase();  // Ambil input koin, misalnya btc
+  
+  // Tambahkan 'idr' ke simbol koin yang dimasukkan
+  const coinSymbol = coinInput + 'idr';  // Membuat simbol seperti 'btc' menjadi 'btcidr'
 
   // Dapatkan analisis untuk koin yang diminta
   const analysisMessage = await getCoinAnalysis(coinSymbol);
   bot.sendMessage(chatId, analysisMessage, { parse_mode: "Markdown" });
 });
 
+// Command handler untuk menangani pesan kosong atau perintah yang tidak dikenali
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  if (msg.text && !msg.text.startsWith('/')) {
+    const infoMessage = await getCoinAnalysis('btcidr');  // Defaultkan ke BTC atau koin lain
+    bot.sendMessage(chatId, infoMessage, { parse_mode: "Markdown" });
+  }
+});
