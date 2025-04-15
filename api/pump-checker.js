@@ -35,21 +35,29 @@ module.exports = async (req, res) => {
 
         // 🔍 Analisis Spread Harga (hanya jika pump terdeteksi)
         if (spread > 0) {
-          const rekomendasi = spread < 0.0000005
+          let spreadRisk = '';
+          if (spread <= 50) {
+            spreadRisk = '🟢 *Risiko Rendah* — Pasar aktif, cocok untuk entry.';
+          } else if (spread <= 200) {
+            spreadRisk = '🟡 *Risiko Sedang* — Perlu hati-hati, cek volume dan arah pasar.';
+          } else {
+            spreadRisk = '🔴 *Risiko Tinggi* — Spread besar, potensi manipulasi atau pasar sepi.';
+          }
+
+          const rekomendasi = spread <= 50
             ? '✅ *Layak dibeli* — Spread kecil, pasar aktif.'
             : '⚠️ *Belum layak beli* — Spread terlalu besar, tunggu momen lebih baik.';
-        
-          pumpMsg += `\n\n🔍 *Analisis Spread:*\n💸 Harga Beli: *${buyPrice}*\n💸 Harga Jual: *${sellPrice}*\n📉 Spread: *${spread}*\n\n${rekomendasi}`;
-        
-          // Tambah Rekomendasi Entry dan TP jika spread oke
-          if (spread < 0.0000005) {
+
+          pumpMsg += `\n\n🔍 *Analisis Spread:*\n💸 Harga Beli (Bid): *${buyPrice}*\n💸 Harga Jual (Ask): *${sellPrice}*\n📉 Spread: *${spread}*\n${spreadRisk}\n\n${rekomendasi}`;
+
+          // 🎯 Target Jual jika spread masuk kategori rendah
+          if (spread <= 50) {
             const hargaMasuk = buyPrice;
-          
-            // Target jual berdasarkan kategori risiko
+
             const tpKecil = Math.round(hargaMasuk * 1.02);   // 2% - aman
             const tpSedang = Math.round(hargaMasuk * 1.05);  // 5% - sedang
             const tpBesar = Math.round(hargaMasuk * 1.10);   // 10% - berisiko
-          
+
             pumpMsg += `\n\n🎯 *Rekomendasi Perdagangan:*\n✅ Beli di kisaran: *${hargaMasuk}*\n\n🎯 *Target Jual:*\n- 💼 TP Aman (2%): *${tpKecil}*\n- ⚖️ TP Sedang (5%): *${tpSedang}*\n- 🎲 TP Berisiko (10%): *${tpBesar}*`;
           }
         }
