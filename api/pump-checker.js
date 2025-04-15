@@ -1,6 +1,5 @@
 const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
-const { analyzeCoin } = require('./lib/analysis');  // Import fungsi analisis
 
 const TELEGRAM_TOKEN = "7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw";
 const CHAT_IDS = ["903532698", "1272569833"];
@@ -9,13 +8,22 @@ const bot = new TelegramBot(TELEGRAM_TOKEN);
 let lastPrices = {};
 let lastVolumes = {};
 
+const coinIdMap = {
+  btcidr: 'bitcoin',
+  ethidr: 'ethereum',
+  usdtidr: 'tether',
+  dogeidr: 'dogecoin',
+  solidr: 'solana',
+  trxidr: 'tron',
+  xrpidr: 'ripple',
+  adaidr: 'cardano',
+  shibidr: 'shiba-inu',
+};
+
 module.exports = async (req, res) => {
   try {
-    console.log('Bot is starting...');  // Log to indicate the bot is starting
-
     const { data } = await axios.get('https://indodax.com/api/tickers');
     const tickers = data.tickers;
-
     let result = [];
 
     for (const [symbol, ticker] of Object.entries(tickers)) {
@@ -27,46 +35,47 @@ module.exports = async (req, res) => {
       const prevVolume = lastVolumes[symbol] || lastVolume;
       const volumeChange = lastVolume - prevVolume;
 
-      console.log(`Checking ${symbol}: lastPrice=${lastPrice}, prevPrice=${prevPrice}, changePercent=${changePercent}%`);
-
-      // Cek jika ada pump (perubahan harga >= 10%)
+      // Analisis kenaikan harga (10% atau lebih)
       if (changePercent >= 10) {
-        const msg = `🚀 *PUMP ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}* \n📈 Naik: *${changePercent.toFixed(2)}%*`;
-
+        const pumpMsg = `🚀 *PUMP ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}* \n📈 Naik: *${changePercent.toFixed(2)}%*`;
         for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
+          await bot.sendMessage(chatId, pumpMsg, { parse_mode: "Markdown" });
         }
-
-        result.push(msg);
+        result.push(pumpMsg);
       }
 
-      // Cek pembelian besar (volume perubahan > 5000)
+      // Analisis perubahan volume (lebih dari 5000)
       if (volumeChange > 5000) {
-        const volumeMsg = `💥 *LARGE PURCHASE ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n📊 Volume Terbaru: *${lastVolume}*\n📊 Volume Sebelumnya: *${prevVolume}*\n📈 Perubahan Volume: *${volumeChange}*`;
-
+        const volumeMsg = `💥 *ALERT VOLUME BESAR!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n📊 Volume Terbaru: *${lastVolume}*\n📊 Volume Sebelumnya: *${prevVolume}*\n📈 Perubahan Volume: *${volumeChange}*`;
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, volumeMsg, { parse_mode: "Markdown" });
         }
-
         result.push(volumeMsg);
       }
 
-      // Analisis koin menggunakan analysis.js
-      const analysisMessage = await analyzeCoin(symbol, ticker);
-      if (analysisMessage) {
-        for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, analysisMessage, { parse_mode: "Markdown" });
-        }
+      // Analisis spread Buy/Sell dan rekomendasi
+      const buyPrice = parseFloat(ticker.buy);
+      const sellPrice = parseFloat(ticker.sell);
+      const spread = sellPrice - buyPrice;
 
-        result.push(analysisMessage);
+      if (spread < 0.0000005) {
+        const spreadMsg = `📉 Spread pasar untuk ${coinIdMap[symbol]} sangat sempit.\nHarga Beli: *${buyPrice}* | Harga Jual: *${sellPrice}*\nSpread: *${spread}* (Sempit)\nSaran: Pasar aktif, pertimbangkan untuk melakukan Buy/Sell.`;
+        for (const chatId of CHAT_IDS) {
+          await bot.sendMessage(chatId, spreadMsg, { parse_mode: "Markdown" });
+        }
+        result.push(spreadMsg);
+      } else if (buyPrice < sellPrice) {
+        const spreadMsg = `📈 Spread pasar untuk ${coinIdMap[symbol]} lebih lebar.\nHarga Beli: *${buyPrice}* | Harga Jual: *${sellPrice}*\nSpread: *${spread}* (Lebar)\nSaran: Perhatikan pergerakan harga, kemungkinan akan ada kenaikan harga.`;
+        for (const chatId of CHAT_IDS) {
+          await bot.sendMessage(chatId, spreadMsg, { parse_mode: "Markdown" });
+        }
+        result.push(spreadMsg);
       }
 
       // Update harga dan volume untuk pemeriksaan berikutnya
       lastPrices[symbol] = lastPrice;
       lastVolumes[symbol] = lastVolume;
     }
-
-    console.log('Process completed.');  // Log after process completes
 
     res.status(200).json({ status: 'ok', message: result });
   } catch (err) {
