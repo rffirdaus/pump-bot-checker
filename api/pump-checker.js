@@ -38,8 +38,20 @@ module.exports = async (req, res) => {
           const rekomendasi = spread < 0.0000005
             ? '✅ *Layak dibeli* — Spread kecil, pasar aktif.'
             : '⚠️ *Belum layak beli* — Spread terlalu besar, tunggu momen lebih baik.';
-
+        
           pumpMsg += `\n\n🔍 *Analisis Spread:*\n💸 Harga Beli: *${buyPrice}*\n💸 Harga Jual: *${sellPrice}*\n📉 Spread: *${spread}*\n\n${rekomendasi}`;
+        
+          // Tambah Rekomendasi Entry dan TP jika spread oke
+          if (spread < 0.0000005) {
+            const hargaMasuk = buyPrice;
+          
+            // Target jual berdasarkan kategori risiko
+            const tpKecil = Math.round(hargaMasuk * 1.02);   // 2% - aman
+            const tpSedang = Math.round(hargaMasuk * 1.05);  // 5% - sedang
+            const tpBesar = Math.round(hargaMasuk * 1.10);   // 10% - berisiko
+          
+            pumpMsg += `\n\n🎯 *Rekomendasi Perdagangan:*\n✅ Beli di kisaran: *${hargaMasuk}*\n\n🎯 *Target Jual:*\n- 💼 TP Aman (2%): *${tpKecil}*\n- ⚖️ TP Sedang (5%): *${tpSedang}*\n- 🎲 TP Berisiko (10%): *${tpBesar}*`;
+          }
         }
 
         for (const chatId of CHAT_IDS) {
