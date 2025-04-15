@@ -30,7 +30,7 @@ module.exports = async (req, res) => {
       const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
 
       // 🚀 Pump Alert
-      if (changePercent >= 1) {
+      if (changePercent >= 10) {
         let pumpMsg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*`;
 
         // 🔍 Analisis Spread Harga (hanya jika pump terdeteksi)
