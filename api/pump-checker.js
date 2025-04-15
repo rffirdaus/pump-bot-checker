@@ -30,7 +30,7 @@ module.exports = async (req, res) => {
       console.log(`Checking ${symbol}: lastPrice=${lastPrice}, prevPrice=${prevPrice}, changePercent=${changePercent}%`);
 
       // Cek jika ada pump (perubahan harga >= 10%)
-      if (changePercent >= 1) {
+      if (changePercent >= 10) {
         const msg = `🚀 *PUMP ALERT!*\n\n🪙 Koin: *${symbol.toUpperCase()}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}* \n📈 Naik: *${changePercent.toFixed(2)}%*`;
 
         for (const chatId of CHAT_IDS) {
