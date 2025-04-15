@@ -14,19 +14,20 @@ async function getCoinAnalysis(symbol) {
     const { data } = await axios.get('https://indodax.com/api/tickers');
     const tickers = data.tickers;
 
-    // Ambil data koin berdasarkan simbol yang diberikan
-    const ticker = tickers[symbol];
-    if (!ticker) return `Koin ${symbol.toUpperCase()} tidak ditemukan.`;
+    // Pastikan simbol dalam huruf kecil
+    const symbolLowerCase = symbol.toLowerCase();  // Konversi simbol menjadi huruf kecil
+    const ticker = tickers[symbolLowerCase];
+    if (!ticker) return `Koin ${symbol} tidak ditemukan.`;
 
     const lastPrice = parseFloat(ticker.last);
-    const prevPrice = lastPrices[symbol] || lastPrice;
+    const prevPrice = lastPrices[symbolLowerCase] || lastPrice;
     const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
     const buyPrice = parseFloat(ticker.buy);
     const sellPrice = parseFloat(ticker.sell);
     const spread = sellPrice - buyPrice;
 
-    const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
+    const coinName = symbolLowerCase.replace('idr', '').toUpperCase() + '/IDR';
 
     // 🚀 Pump Alert
     let pumpMsg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*`;
