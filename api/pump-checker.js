@@ -84,7 +84,7 @@ module.exports = async (req, res) => {
         (isMAcrossUp ? 1 : 0)
       );
 
-      if (pumpScore >= 3) {
+      if (pumpScore >= 1) {
         let pumpMsg = `🚀 *PUMP TERDETEKSI!*
 
 🪙 Koin: *${coinName}*
