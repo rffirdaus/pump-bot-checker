@@ -2,7 +2,7 @@ const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
 
 const TELEGRAM_TOKEN = "7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw";
-const CHAT_IDS = ["903532698", "1272569833"];
+const CHAT_IDS = ["903532698", "1272569833", "1379981451"];
 const bot = new TelegramBot(TELEGRAM_TOKEN);
 
 let lastPrices = {};
