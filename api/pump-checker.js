@@ -7,6 +7,39 @@ const bot = new TelegramBot(TELEGRAM_TOKEN);
 
 let lastPrices = {};
 let lastVolumes = {};
+let rsiData = {};
+let maData = {};
+
+// Helper RSI function
+function calculateRSI(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff >= 0) gains += diff;
+    else losses -= diff;
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+// Moving Average
+function calculateMA(data, period = 9) {
+  if (data.length < period) return null;
+  const slice = data.slice(-period);
+  return slice.reduce((acc, val) => acc + val, 0) / period;
+}
+
+// Simple Breakout Detection
+function detectBreakout(closes) {
+  if (closes.length < 20) return null;
+  const recentHigh = Math.max(...closes.slice(-20, -1));
+  const latest = closes[closes.length - 1];
+  return latest > recentHigh ? recentHigh : null;
+}
 
 module.exports = async (req, res) => {
   try {
@@ -21,7 +54,7 @@ module.exports = async (req, res) => {
 
       const lastVolume = parseFloat(ticker.volume);
       const prevVolume = lastVolumes[symbol] || lastVolume;
-      const volumeChange = lastVolume - prevVolume;
+      const volumeSpike = ((lastVolume - prevVolume) / (prevVolume || 1)) * 100;
 
       const buyPrice = parseFloat(ticker.buy);
       const sellPrice = parseFloat(ticker.sell);
@@ -29,59 +62,64 @@ module.exports = async (req, res) => {
 
       const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
 
-      // 🚀 Pump Alert
-      if (changePercent >= 8) {
-        let pumpMsg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n💰 Harga Terbaru: *${lastPrice}*\n💰 Harga Sebelumnya: *${prevPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*`;
+      // Update history data
+      if (!rsiData[symbol]) rsiData[symbol] = [];
+      if (!maData[symbol]) maData[symbol] = [];
+      rsiData[symbol].push(lastPrice);
+      maData[symbol].push(lastPrice);
+      if (rsiData[symbol].length > 100) rsiData[symbol].shift();
+      if (maData[symbol].length > 100) maData[symbol].shift();
 
-        // 🔍 Analisis Spread Harga (hanya jika pump terdeteksi)
-        if (spread > 0) {
-          let spreadRisk = '';
-          if (spread <= 50) {
-            spreadRisk = '🟢 *Risiko Rendah* — Pasar aktif, cocok untuk entry.';
-          } else if (spread <= 200) {
-            spreadRisk = '🟡 *Risiko Sedang* — Perlu hati-hati, cek volume dan arah pasar.';
-          } else {
-            spreadRisk = '🔴 *Risiko Tinggi* — Spread besar, potensi manipulasi atau pasar sepi.';
-          }
+      const rsi = calculateRSI(rsiData[symbol]);
+      const ma9 = calculateMA(maData[symbol], 9);
+      const ma21 = calculateMA(maData[symbol], 21);
+      const isMAcrossUp = ma9 && ma21 && ma9 > ma21;
 
-          const rekomendasi = spread <= 50
-            ? '✅ *Layak dibeli* — Spread kecil, pasar aktif.'
-            : '⚠️ *Belum layak beli* — Spread terlalu besar, tunggu momen lebih baik.';
+      const breakoutLevel = detectBreakout(maData[symbol]);
 
-          pumpMsg += `\n\n🔍 *Analisis Spread:*\n💸 Harga Beli (Bid): *${buyPrice}*\n💸 Harga Jual (Ask): *${sellPrice}*\n📉 Spread: *${spread}*\n${spreadRisk}\n\n${rekomendasi}`;
+      const pumpScore = (
+        (changePercent >= 5 ? 1 : 0) +
+        (volumeSpike >= 100 ? 1 : 0) +
+        (rsi >= 70 ? 1 : 0) +
+        (isMAcrossUp ? 1 : 0)
+      );
 
-          // 🎯 Target Jual jika spread masuk kategori rendah
-          if (spread <= 50) {
-            const hargaMasuk = buyPrice;
+      if (pumpScore >= 3) {
+        let pumpMsg = `🚀 *PUMP TERDETEKSI!*
 
-            const tpKecil = Math.round(hargaMasuk * 1.02);   // 2% - aman
-            const tpSedang = Math.round(hargaMasuk * 1.05);  // 5% - sedang
-            const tpBesar = Math.round(hargaMasuk * 1.10);   // 10% - berisiko
+🪙 Koin: *${coinName}*
+💰 Harga Terbaru: *${lastPrice}*
+📈 Kenaikan: *${changePercent.toFixed(2)}%*
+📊 Volume Spike: *${volumeSpike.toFixed(2)}%*
+📈 RSI: *${rsi ? rsi.toFixed(2) : '-'}*
+📉 Spread: *${spread}*
+📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''}`;
 
-            pumpMsg += `\n\n🎯 *Rekomendasi Perdagangan:*\n✅ Beli di kisaran: *${hargaMasuk}*\n\n🎯 *Target Jual:*\n- 💼 TP Aman (2%): *${tpKecil}*\n- ⚖️ TP Sedang (5%): *${tpSedang}*\n- 🎲 TP Berisiko (10%): *${tpBesar}*`;
-          }
+        if (breakoutLevel) {
+          pumpMsg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakoutLevel}*`;
         }
 
-        // Fetch Fundamental Data from CoinGecko
-        try {
-          const coinGeckoData = await axios.get(`https://api.coingecko.com/api/v3/coins/${coinName.toLowerCase()}`);
-          const { market_cap, circulating_supply, total_supply, volume_24h } = coinGeckoData.data.market_data;
-
-          const fundamentalMsg = `
-          📊 *Analisis Fundamental:*\n
-          💸 *Market Cap*: ${market_cap.toLocaleString()}\n
-          🔄 *Circulating Supply*: ${circulating_supply.toLocaleString()}\n
-          🔢 *Total Supply*: ${total_supply.toLocaleString()}\n
-          📈 *Volume 24h*: ${volume_24h.toLocaleString()}
-          `;
-
-          pumpMsg += fundamentalMsg;
-        } catch (error) {
-          console.error('Error fetching fundamental data:', error.message);
-          pumpMsg += "\n⚠️ Gagal mendapatkan data fundamental.";
+        let spreadRisk = '', rekomendasi = '';
+        if (spread <= 50) {
+          spreadRisk = '🟢 *Risiko Rendah*';
+          rekomendasi = '✅ *Layak dibeli*';
+        } else if (spread <= 200) {
+          spreadRisk = '🟡 *Risiko Sedang*';
+          rekomendasi = '⚠️ *Hati-hati saat beli*';
+        } else {
+          spreadRisk = '🔴 *Risiko Tinggi*';
+          rekomendasi = '🚫 *Tidak disarankan entry sekarang*';
         }
 
-        // Kirim pesan ke Telegram
+        pumpMsg += `\n\n📊 ${spreadRisk}\n${rekomendasi}`;
+
+        const tp1 = Math.round(buyPrice * 1.02);
+        const tp2 = Math.round(buyPrice * 1.05);
+        const tp3 = Math.round(buyPrice * 1.10);
+        const sl = Math.round(buyPrice * 0.97);
+
+        pumpMsg += `\n\n🎯 *Strategi Perdagangan:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP Aman (2%): *${tp1}*\n- TP Sedang (5%): *${tp2}*\n- TP Risky (10%): *${tp3}*`;
+
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, pumpMsg, { parse_mode: "Markdown" });
         }
@@ -89,18 +127,6 @@ module.exports = async (req, res) => {
         result.push(pumpMsg);
       }
 
-      // 💥 Volume Besar
-      if (volumeChange > 5000) {
-        const volumeMsg = `💥 *VOLUME BESAR TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n📊 Volume Sekarang: *${lastVolume}*\n📊 Volume Sebelumnya: *${prevVolume}*\n📈 Perubahan Volume: *${volumeChange}*`;
-
-        for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, volumeMsg, { parse_mode: "Markdown" });
-        }
-
-        result.push(volumeMsg);
-      }
-
-      // Simpan data terakhir untuk pengecekan berikutnya
       lastPrices[symbol] = lastPrice;
       lastVolumes[symbol] = lastVolume;
     }
