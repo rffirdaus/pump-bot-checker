@@ -1,5 +1,5 @@
-const axios = require("axios");
-const TelegramBot = require("node-telegram-bot-api");
+const axios = require('axios');
+const TelegramBot = require('node-telegram-bot-api');
 
 const TELEGRAM_TOKEN = "7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw";
 const CHAT_IDS = ["903532698", "1272569833", "1379981451"];
@@ -7,8 +7,9 @@ const bot = new TelegramBot(TELEGRAM_TOKEN);
 
 let lastPrices = {};
 let lastVolumes = {};
-let priceHistory = {};
+let priceHistory = {}; // For multi-timeframe & patterns
 
+// RSI Calculation
 function calculateRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
   let gains = 0, losses = 0;
@@ -24,116 +25,102 @@ function calculateRSI(closes, period = 14) {
   return 100 - (100 / (1 + rs));
 }
 
-function calculateMA(data, period) {
+function calculateMA(data, period = 9) {
   if (data.length < period) return null;
-  const slice = data.slice(-period);
-  return slice.reduce((acc, val) => acc + val, 0) / period;
+  return data.slice(-period).reduce((acc, val) => acc + val, 0) / period;
 }
 
-function detectBreakout(closes) {
-  if (closes.length < 20) return null;
-  const recentHigh = Math.max(...closes.slice(-20, -1));
-  const latest = closes[closes.length - 1];
-  return latest > recentHigh ? recentHigh : null;
+function detectBreakout(data) {
+  if (data.length < 20) return null;
+  const resistance = Math.max(...data.slice(-20, -1));
+  return data[data.length - 1] > resistance ? resistance : null;
 }
 
-function detectBullishEngulfing(closes) {
-  if (closes.length < 3) return false;
-  const prev = closes[closes.length - 2];
-  const curr = closes[closes.length - 1];
-  return curr > prev * 1.02;
-}
-
-function calculateMACD(prices, shortPeriod = 12, longPeriod = 26, signalPeriod = 9) {
-  if (prices.length < longPeriod + signalPeriod) return null;
-  const ema = (data, period) => {
-    const k = 2 / (period + 1);
-    return data.reduce((acc, val, i) => {
-      if (i === 0) return [val];
-      acc.push(val * k + acc[i - 1] * (1 - k));
-      return acc;
-    }, []);
-  };
-  const emaShort = ema(prices.slice(-longPeriod - signalPeriod), shortPeriod);
-  const emaLong = ema(prices.slice(-longPeriod - signalPeriod), longPeriod);
-  const macdLine = emaShort.map((val, i) => val - emaLong[i]);
-  const signalLine = ema(macdLine, signalPeriod);
-  const latest = macdLine[macdLine.length - 1];
-  const signal = signalLine[signalLine.length - 1];
-  return latest > signal ? "bullish" : "neutral";
+function calculateProbability(score, total) {
+  return Math.round((score / total) * 100);
 }
 
 module.exports = async (req, res) => {
   try {
-    const { data } = await axios.get("https://indodax.com/api/tickers");
+    const { data } = await axios.get('https://indodax.com/api/tickers');
     const tickers = data.tickers;
-    const result = [];
+    let result = [];
 
     for (const [symbol, ticker] of Object.entries(tickers)) {
       const lastPrice = parseFloat(ticker.last);
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      const volume = parseFloat(ticker.volume);
-      const prevVolume = lastVolumes[symbol] || volume;
-      const volumeSpike = ((volume - prevVolume) / (prevVolume || 1)) * 100;
+      const lastVolume = parseFloat(ticker.volume);
+      const prevVolume = lastVolumes[symbol] || lastVolume;
+      const volumeSpike = ((lastVolume - prevVolume) / (prevVolume || 1)) * 100;
 
       const buyPrice = parseFloat(ticker.buy);
       const sellPrice = parseFloat(ticker.sell);
       const spread = sellPrice - buyPrice;
-      const coinName = symbol.replace("idr", "").toUpperCase() + "/IDR";
+      const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
 
+      // Init
       if (!priceHistory[symbol]) priceHistory[symbol] = [];
       priceHistory[symbol].push(lastPrice);
-      if (priceHistory[symbol].length > 150) priceHistory[symbol].shift();
+      if (priceHistory[symbol].length > 100) priceHistory[symbol].shift();
 
-      const closes = priceHistory[symbol];
-      const rsi = calculateRSI(closes);
-      const ma9 = calculateMA(closes, 9);
-      const ma21 = calculateMA(closes, 21);
-      const macd = calculateMACD(closes);
-      const breakout = detectBreakout(closes);
-      const engulf = detectBullishEngulfing(closes);
+      const rsi = calculateRSI(priceHistory[symbol]);
+      const ma9 = calculateMA(priceHistory[symbol], 9);
+      const ma21 = calculateMA(priceHistory[symbol], 21);
+      const maCrossUp = ma9 && ma21 && ma9 > ma21;
+      const breakout = detectBreakout(priceHistory[symbol]);
 
-      let score = 0;
-      if (changePercent >= 5) score += 25;
-      if (volumeSpike >= 100) score += 25;
-      if (rsi && rsi >= 70) score += 15;
-      if (ma9 && ma21 && ma9 > ma21) score += 10;
-      if (breakout) score += 10;
-      if (macd === "bullish") score += 10;
-      if (engulf) score += 5;
+      // Scoring
+      const conditions = [
+        changePercent >= 5,
+        volumeSpike >= 100,
+        rsi >= 70,
+        maCrossUp,
+        !!breakout,
+        spread < 100
+      ];
+      const score = conditions.filter(Boolean).length;
+      const probability = calculateProbability(score, conditions.length);
 
-      const pumpProbability = Math.min(100, score);
+      // Signal
+      if (score >= 4) {
+        let msg = `🚀 *PUMP TERDETEKSI!*
 
-      if (pumpProbability >= 70) {
-        let msg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n💰 Harga Terbaru: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume Spike: *${volumeSpike.toFixed(2)}%*\n📈 RSI: *${rsi?.toFixed(2)}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}* ${ma9 > ma21 ? "(📈 MA CROSS UP)" : ""}\n📊 MACD: *${macd}*${engulf ? "\n📌 Candlestick: *Bullish Engulfing*" : ""}`;
+🪙 Koin: *${coinName}*
+💰 Harga Terbaru: *${lastPrice}*
+📈 Kenaikan: *${changePercent.toFixed(2)}%*
+📊 Volume Spike: *${volumeSpike.toFixed(2)}%*
+📈 RSI: *${rsi ? rsi.toFixed(2) : '-'}*
+📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${maCrossUp ? ' (📈 MA CROSS UP)' : ''}
+📉 Spread: *${spread}*
+🎯 *Kemungkinan Pump: ${probability}%*`;
 
         if (breakout) {
           msg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakout}*`;
         }
 
-        msg += `\n\n🔎 *Kemungkinan pump: ${pumpProbability}%*`;
-
-        let risk = "";
-        let rekom = "";
-        if (spread <= 50) {
-          risk = "🟢 *Risiko Rendah*";
-          rekom = "✅ *Layak dibeli*";
-        } else if (spread <= 200) {
-          risk = "🟡 *Risiko Sedang*";
-          rekom = "⚠️ *Hati-hati saat entry*";
+        let risk = '', advice = '';
+        if (spread < 50) {
+          risk = '🟢 *Risiko Rendah*';
+          advice = '✅ *Layak dibeli*';
+        } else if (spread < 200) {
+          risk = '🟡 *Risiko Sedang*';
+          advice = '⚠️ *Hati-hati saat beli*';
         } else {
-          risk = "🔴 *Risiko Tinggi*";
-          rekom = "🚫 *Tidak disarankan entry*";
+          risk = '🔴 *Risiko Tinggi*';
+          advice = '🚫 *Tidak disarankan entry sekarang*';
         }
 
-        msg += `\n\n${risk}\n${rekom}`;
+        msg += `\n\n📊 ${risk}\n${advice}`;
 
+        const tp = Math.round(buyPrice * (1 + probability / 200));
         const sl = Math.round(buyPrice * 0.97);
-        const tp = Math.round(buyPrice * (1 + pumpProbability / 100)); // Dinamis
 
-        msg += `\n\n🎯 *Strategi:* \n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP: *${tp}*`;
+        msg += `\n\n🎯 *Strategi Perdagangan:*
+- Entry: < *${buyPrice}*
+- SL: *${sl}*
+- TP Potensial: *${tp}*`;
 
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
@@ -143,12 +130,12 @@ module.exports = async (req, res) => {
       }
 
       lastPrices[symbol] = lastPrice;
-      lastVolumes[symbol] = volume;
+      lastVolumes[symbol] = lastVolume;
     }
 
-    res.status(200).json({ status: "ok", message: result });
+    res.status(200).json({ status: 'ok', message: result });
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error('Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 };
