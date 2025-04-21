@@ -2,7 +2,11 @@
   "dependencies": {
     "axios": "^1.8.4",
     "fs": "^0.0.1-security",
+    "node-fetch": "^3.3.2",
     "node-telegram-bot-api": "^0.66.0",
-    "technicalindicators": "^3.1.0"
+    "node-vibrant": "^4.0.3",
+    "sharp": "^0.34.1",
+    "technicalindicators": "^3.1.0",
+    "telegraf": "^4.16.3"
   }
 }
