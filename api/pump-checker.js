@@ -74,7 +74,6 @@ module.exports = async (req, res) => {
 
       const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
 
-      // Update history data
       if (!rsiData[symbol]) rsiData[symbol] = [];
       if (!maData[symbol]) maData[symbol] = [];
       rsiData[symbol].push(lastPrice);
@@ -99,9 +98,23 @@ module.exports = async (req, res) => {
         (macd > 0 ? 1 : 0)
       );
 
-      const probability = (pumpScore / 5) * 100; // Simplified probability calculation
+      const probability = (pumpScore / 5) * 100;
 
-      if (pumpScore >= 3) { // Minimum threshold for a valid pump
+      // 📡 Waspada: Koin mendekati pump
+      if (pumpScore === 2) {
+        let alertMsg = `📡 *Koin Mendekati Pump!*\n\n🪙 Koin: *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Potensi Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume Spike: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
+
+        if (isMAcrossUp) alertMsg += `\n📐 *MA Cross Up terdeteksi!*`;
+        if (breakoutLevel) alertMsg += `\n📊 *Harga mendekati level breakout di* ${breakoutLevel}`;
+
+        alertMsg += `\n\n⚠️ Belum ada konfirmasi penuh pump, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
+
+        for (const chatId of CHAT_IDS) {
+          await bot.sendMessage(chatId, alertMsg, { parse_mode: "Markdown" });
+        }
+      }
+
+      if (pumpScore >= 3) {
         let pumpMsg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n💰 Harga Terbaru: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume Spike: *${volumeSpike.toFixed(2)}%*\n📈 RSI: *${rsi ? rsi.toFixed(2) : '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''};`;
 
         if (breakoutLevel) {
