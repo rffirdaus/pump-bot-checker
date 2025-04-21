@@ -66,7 +66,7 @@ module.exports = async (req, res) => {
 
       const lastVolume = parseFloat(ticker.volume);
       const prevVolume = lastVolumes[symbol] || lastVolume;
-      const volumeSpike = ((lastVolume - prevVolume) / (prevVolume || 1)) * 100;
+      const volumeSpike = prevVolume > 0 ? ((lastVolume - prevVolume) / prevVolume) * 100 : 0;
 
       const buyPrice = parseFloat(ticker.buy);
       const sellPrice = parseFloat(ticker.sell);
