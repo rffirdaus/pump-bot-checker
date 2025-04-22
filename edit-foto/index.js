@@ -1,7 +1,6 @@
 const { Telegraf } = require('telegraf');
 const fetch = require('node-fetch');
 const sharp = require('sharp');
-const Vibrant = require('node-vibrant');
 
 // Ganti token dengan punyamu
 const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw');
@@ -14,14 +13,14 @@ async function downloadPhoto(fileId, bot) {
   return buffer;
 }
 
-// Generate SVG gradien dari 2 warna
+// Generate SVG gradien dari 2 warna dengan opasitas halus
 function generateGradientSvg(primary, secondary, width, height) {
   return Buffer.from(`
     <svg width="${width}" height="${height}">
       <defs>
         <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${primary}" stop-opacity="0.4"/>
-          <stop offset="100%" stop-color="${secondary}" stop-opacity="0.6"/>
+          <stop offset="0%" stop-color="${primary}" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="${secondary}" stop-opacity="0.4"/>
         </linearGradient>
       </defs>
       <rect width="100%" height="100%" fill="url(#g)" />
@@ -29,19 +28,23 @@ function generateGradientSvg(primary, secondary, width, height) {
   `);
 }
 
-// Proses gambar + tambah gradien
+// Proses gambar + tambah gradien tanpa resize
 async function applyGradient(buffer) {
-  const resized = await sharp(buffer).resize(800, 800).toBuffer();
-  const palette = await Vibrant.from(resized).getPalette();
+  // Tidak ada resizing, tetap pakai ukuran asli gambar
+  const image = sharp(buffer);
+  const metadata = await image.metadata();
 
-  const primary = palette.Vibrant?.getHex() || '#333333';
-  const secondary = palette.Muted?.getHex() || '#777777';
+  const primary = '#FF7F50';  // Warna utama (Coral, warna lembut)
+  const secondary = '#98FB98';  // Warna sekunder (Pale Green)
 
-  const gradient = generateGradientSvg(primary, secondary, 800, 800);
+  const gradient = generateGradientSvg(primary, secondary, metadata.width, metadata.height);
 
-  return sharp(resized)
+  // Terapkan gradien pada gambar tanpa mengubah ukuran
+  const finalImage = await image
     .composite([{ input: gradient, blend: 'overlay' }])
     .toBuffer();
+
+  return finalImage;
 }
 
 // Handle kiriman foto dari user
@@ -51,7 +54,7 @@ bot.on('photo', async (ctx) => {
     const originalImage = await downloadPhoto(fileId, bot);
     const editedImage = await applyGradient(originalImage);
 
-    await ctx.replyWithPhoto({ source: editedImage }, { caption: '✨ Sudah dikasih sentuhan gradien sesuai nuansa fotomu!' });
+    await ctx.replyWithPhoto({ source: editedImage }, { caption: '✨ Sudah dikasih sentuhan gradien yang lebih natural!' });
   } catch (err) {
     console.error('❌ Error:', err);
     ctx.reply('Oops! Gagal mengedit foto.');

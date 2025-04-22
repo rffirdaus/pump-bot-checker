@@ -1,10 +1,11 @@
 {
   "dependencies": {
     "axios": "^1.8.4",
+    "color-thief-node": "^1.0.4",
     "fs": "^0.0.1-security",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "node-telegram-bot-api": "^0.66.0",
-    "node-vibrant": "^4.0.3",
+    "node-vibrant": "^2.0.0",
     "sharp": "^0.34.1",
     "technicalindicators": "^3.1.0",
     "telegraf": "^4.16.3"

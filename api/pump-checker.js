@@ -9,8 +9,19 @@ let lastPrices = {};
 let lastVolumes = {};
 let rsiData = {};
 let maData = {};
+let macdHistory = {};
 
-// Helper RSI function
+// EMA helper
+function calculateEMA(data, period) {
+  const k = 2 / (period + 1);
+  let emaArray = [data[0]];
+  for (let i = 1; i < data.length; i++) {
+    emaArray.push(data[i] * k + emaArray[i - 1] * (1 - k));
+  }
+  return emaArray;
+}
+
+// RSI
 function calculateRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
   let gains = 0, losses = 0;
@@ -26,14 +37,14 @@ function calculateRSI(closes, period = 14) {
   return 100 - (100 / (1 + rs));
 }
 
-// Moving Average
+// MA
 function calculateMA(data, period = 9) {
   if (data.length < period) return null;
   const slice = data.slice(-period);
   return slice.reduce((acc, val) => acc + val, 0) / period;
 }
 
-// Simple Breakout Detection
+// Breakout
 function detectBreakout(closes) {
   if (closes.length < 20) return null;
   const recentHigh = Math.max(...closes.slice(-20, -1));
@@ -41,18 +52,24 @@ function detectBreakout(closes) {
   return latest > recentHigh ? recentHigh : null;
 }
 
-// MACD Calculation
-function calculateMACD(closes, shortPeriod = 12, longPeriod = 26, signalPeriod = 9) {
-  const shortMA = calculateMA(closes.slice(-shortPeriod), shortPeriod);
-  const longMA = calculateMA(closes.slice(-longPeriod), longPeriod);
-  if (shortMA && longMA) {
-    const macd = shortMA - longMA;
-    const signal = calculateMA([macd], signalPeriod);
-    return { macd, signal };
-  }
-  return null;
+// MACD
+function calculateMACD(closes, symbol, shortPeriod = 12, longPeriod = 26, signalPeriod = 9) {
+  if (closes.length < longPeriod + signalPeriod) return null;
+
+  const shortEMA = calculateEMA(closes.slice(-longPeriod - signalPeriod), shortPeriod);
+  const longEMA = calculateEMA(closes.slice(-longPeriod - signalPeriod), longPeriod);
+  const macdLine = shortEMA.map((val, idx) => val - longEMA[idx]);
+
+  const signalLine = calculateEMA(macdLine.slice(-signalPeriod), signalPeriod);
+  const latestMACD = macdLine[macdLine.length - 1];
+  const latestSignal = signalLine[signalLine.length - 1];
+
+  macdHistory[symbol] = macdLine;
+
+  return { macd: latestMACD, signal: latestSignal };
 }
 
+// Main function
 module.exports = async (req, res) => {
   try {
     const { data } = await axios.get('https://indodax.com/api/tickers');
@@ -71,7 +88,6 @@ module.exports = async (req, res) => {
       const buyPrice = parseFloat(ticker.buy);
       const sellPrice = parseFloat(ticker.sell);
       const spread = sellPrice - buyPrice;
-
       const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
 
       if (!rsiData[symbol]) rsiData[symbol] = [];
@@ -85,43 +101,41 @@ module.exports = async (req, res) => {
       const ma9 = calculateMA(maData[symbol], 9);
       const ma21 = calculateMA(maData[symbol], 21);
       const isMAcrossUp = ma9 && ma21 && ma9 > ma21;
-
       const breakoutLevel = detectBreakout(maData[symbol]);
-      const macdData = calculateMACD(maData[symbol]);
+      const macdData = calculateMACD(maData[symbol], symbol);
       const macd = macdData ? macdData.macd : 0;
 
       const pumpScore = (
-        (changePercent >= 5 ? 1 : 0) +
-        (volumeSpike >= 100 ? 1 : 0) +
-        (rsi >= 70 ? 1 : 0) +
+        (changePercent >= 4 ? 1 : 0) +
+        (volumeSpike >= 70 ? 1 : 0) +
+        (rsi >= 65 ? 1 : 0) +
         (isMAcrossUp ? 1 : 0) +
         (macd > 0 ? 1 : 0)
       );
-
       const probability = (pumpScore / 5) * 100;
 
-      // 📡 Waspada: Koin mendekati pump
+      // Sinyal awal
       if (pumpScore === 2) {
-        let alertMsg = `📡 *Koin Mendekati Pump!*\n\n🪙 Koin: *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Potensi Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume Spike: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
+        let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
 
-        if (isMAcrossUp) alertMsg += `\n📐 *MA Cross Up terdeteksi!*`;
-        if (breakoutLevel) alertMsg += `\n📊 *Harga mendekati level breakout di* ${breakoutLevel}`;
-
-        alertMsg += `\n\n⚠️ Belum ada konfirmasi penuh pump, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
+        if (isMAcrossUp) msg += `\n📐 *MA Cross Up terdeteksi!*`;
+        if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
+        msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
 
         for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, alertMsg, { parse_mode: "Markdown" });
+          await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
         }
       }
 
+      // Pump terkonfirmasi
       if (pumpScore >= 3) {
-        let pumpMsg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 Koin: *${coinName}*\n💰 Harga Terbaru: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume Spike: *${volumeSpike.toFixed(2)}%*\n📈 RSI: *${rsi ? rsi.toFixed(2) : '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''};`;
+        let msg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''}`;
 
         if (breakoutLevel) {
-          pumpMsg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakoutLevel}*`;
+          msg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakoutLevel}*`;
         }
 
-        pumpMsg += `\n\n📊 *Skor Probabilitas Pump: ${probability}%*\n`;
+        msg += `\n\n📊 *Skor Probabilitas Pump: ${probability.toFixed(0)}%*`;
 
         let spreadRisk = '', rekomendasi = '';
         if (spread <= 50) {
@@ -129,13 +143,13 @@ module.exports = async (req, res) => {
           rekomendasi = '✅ *Layak dibeli*';
         } else if (spread <= 200) {
           spreadRisk = '🟡 *Risiko Sedang*';
-          rekomendasi = '⚠️ *Hati-hati saat beli*';
+          rekomendasi = '⚠️ *Hati-hati saat entry*';
         } else {
           spreadRisk = '🔴 *Risiko Tinggi*';
-          rekomendasi = '🚫 *Tidak disarankan entry sekarang*';
+          rekomendasi = '🚫 *Tidak disarankan entry*';
         }
 
-        pumpMsg += `\n\n📊 ${spreadRisk}\n${rekomendasi}`;
+        msg += `\n\n📊 ${spreadRisk}\n${rekomendasi}`;
 
         let tp1, tp2, tp3, sl;
         if (probability >= 80) {
@@ -155,13 +169,13 @@ module.exports = async (req, res) => {
           sl = Math.round(buyPrice * 0.98);
         }
 
-        pumpMsg += `\n\n🎯 *Strategi Perdagangan:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP Aman (2%): *${tp1}*\n- TP Sedang (5%): *${tp2}*\n- TP Risky (10%): *${tp3}*`;
+        msg += `\n\n🎯 *Strategi Trading:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP 2%: *${tp1}*\n- TP 5%: *${tp2}*\n- TP 10%: *${tp3}*`;
 
         for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, pumpMsg, { parse_mode: "Markdown" });
+          await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
         }
 
-        result.push(pumpMsg);
+        result.push(msg);
       }
 
       lastPrices[symbol] = lastPrice;
