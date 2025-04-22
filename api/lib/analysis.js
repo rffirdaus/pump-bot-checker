@@ -1,72 +1,53 @@
+// Install terlebih dahulu: npm install telegraf axios
+
+const { Telegraf } = require('telegraf');
 const axios = require('axios');
-const { RSI } = require('technicalindicators');
-const coinIdMap = require('../data/coinIdMap.json');  // Import coinIdMap hasil sinkronisasi
 
-// Fungsi untuk mengambil data harga dari CoinGecko
-const getCoinGeckoData = async (coinId) => {
+const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw');
+
+bot.start((ctx) => {
+  ctx.reply('Halo! Kirim nama koin + "indodax", contoh:\n\nloom indodax');
+});
+
+bot.on('text', async (ctx) => {
+  const text = ctx.message.text.toLowerCase().trim();
+  const [coin, source] = text.split(' ');
+
+  if (source !== 'indodax') {
+    return ctx.reply('Format salah. Contoh: loom indodax');
+  }
+
+  const pair = `${coin}_idr`;
   try {
-    const { data } = await axios.get(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=idr&days=30`);
-    return data;
+    const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
+    const price = parseInt(res.data.ticker.last);
+
+    // Simulasi analisis
+    const buyZoneLow = Math.floor(price * 0.89);
+    const buyZoneHigh = Math.floor(price * 0.94);
+    const tp1 = Math.floor(price * 1.03);
+    const tp2 = Math.floor(price * 1.08);
+    const tp3 = Math.floor(price * 1.13);
+    const sl = Math.floor(price * 0.85);
+
+    let status = '';
+    if (price < sl) {
+      status = '📉 Status: Harga di bawah support, jangan beli dulu.';
+    } else if (price >= buyZoneLow && price <= buyZoneHigh) {
+      status = '✅ Status: Harga berada di zona beli — kamu bisa mulai cicil beli.';
+    } else if (price > buyZoneHigh) {
+      status = '⚠️ Status: Harga masih di atas zona beli — tunggu koreksi.';
+    } else {
+      status = '⚠️ Status: Harga belum masuk zona aman untuk beli.';
+    }
+
+    const message = `📊 ANALISIS ${coin.toUpperCase()}/IDR\nHarga sekarang: ${price} IDR\n\n🟦 Buy area: ${buyZoneLow} – ${buyZoneHigh} IDR\n❌ Stop Loss: < ${sl} IDR\n🎯 Target Profit:\n- TP1: ${tp1} IDR\n- TP2: ${tp2} IDR\n- TP3: ${tp3} IDR\n\n${status}`;
+
+    ctx.reply(message);
   } catch (error) {
-    console.error('❌ Gagal mengambil data dari CoinGecko:', error.message);
-    return null;
+    ctx.reply(`Koin \"${coin}\" tidak ditemukan di Indodax.`);
   }
-};
+});
 
-// Fungsi untuk menghitung RSI berdasarkan harga penutupan
-const calculateRSI = (prices) => {
-  const closePrices = prices.map((price) => price[1]);  // Ambil hanya harga penutupan
-  const rsi = RSI.calculate({ values: closePrices, period: 14 });
-  return rsi[rsi.length - 1];  // Ambil RSI terbaru
-};
-
-// Fungsi untuk mendapatkan rekomendasi harga masuk dan take profit
-const getRecommendation = (rsi, lastPrice) => {
-  let recommendation = '💡 Tidak ada rekomendasi saat ini';
-
-  if (rsi > 70) {
-    recommendation = `🔴 Overbought! Hindari beli, harga mungkin akan turun. Take Profit di harga: *${(lastPrice * 0.9).toFixed(2)}*`;
-  } else if (rsi < 30) {
-    recommendation = `🟢 Oversold! Waktu yang baik untuk beli, harga mungkin akan naik. Buy di harga: *${(lastPrice * 1.1).toFixed(2)}*`;
-  } else {
-    recommendation = `🟡 RSI normal, pertimbangkan kondisi pasar sebelum membeli.`;
-  }
-
-  return recommendation;
-};
-
-// Fungsi utama untuk analisis dan rekomendasi koin
-const analyzeCoin = async (symbol, ticker) => {
-  const coinId = coinIdMap[symbol];
-  if (!coinId) {
-    console.log(`⚠️ Koin ${symbol} tidak ditemukan di CoinGecko`);
-    return null;
-  }
-
-  // Ambil data harga dan volume dari CoinGecko untuk analisis
-  const coinData = await getCoinGeckoData(coinId);
-  if (!coinData) {
-    return null;
-  }
-
-  // Hitung RSI dari data harga terakhir (30 hari)
-  const rsi = calculateRSI(coinData.prices);
-  const lastPrice = parseFloat(ticker.last);
-
-  // Dapatkan rekomendasi berdasarkan RSI dan harga
-  const recommendation = getRecommendation(rsi, lastPrice);
-
-  // Buat pesan analisis
-  const msg = `
-    🪙 Koin: *${symbol.toUpperCase()}*
-    💰 Harga Terbaru: *${lastPrice}*
-    📈 RSI: *${rsi.toFixed(2)}*
-    ${recommendation}
-  `;
-
-  return msg;
-};
-
-module.exports = {
-  analyzeCoin,
-};
+bot.launch();
+console.log('Bot sedang berjalan...');
