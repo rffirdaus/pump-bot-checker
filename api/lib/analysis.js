@@ -1,48 +1,45 @@
+// Install dulu: npm install telegraf axios
+
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
-const fs = require('fs');
 
-const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw');
+const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw'); // ganti dengan token asli
 
-// Fungsi bantu buat simulasi moving average dari cache
+const cache = {}; // Simpan histori harga tiap koin
+
+// Hitung Moving Average
 function calculateMA(data, period = 5) {
-  if (data.length < period) return null;
+  if (!data || data.length < period) return '🔄 (menunggu data)';
   const recent = data.slice(-period);
   const sum = recent.reduce((acc, val) => acc + val, 0);
   return Math.floor(sum / period);
 }
 
-// Fungsi bantu buat simulasi RSI dari cache
+// Hitung RSI sederhana
 function calculateRSI(prices, period = 5) {
-  if (prices.length < period + 1) return null;
-
+  if (!prices || prices.length < period + 1) return '🔄 (menunggu data)';
   let gains = 0, losses = 0;
   for (let i = 1; i <= period; i++) {
     const diff = prices[i] - prices[i - 1];
     if (diff > 0) gains += diff;
     else losses -= diff;
   }
-
   if (losses === 0) return 100;
   const rs = gains / losses;
-  return Math.floor(100 - (100 / (1 + rs)));
+  return Math.floor(100 - 100 / (1 + rs));
 }
 
-// Simpan cache harga per coin
-let cache = {};
-const cacheFile = 'price_cache.json';
-if (fs.existsSync(cacheFile)) {
-  cache = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
+// Format angka
+function formatNumber(num) {
+  return new Intl.NumberFormat('id-ID').format(num);
 }
 
-setInterval(() => {
-  fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
-}, 10000); // autosave tiap 10 detik
-
+// Bot start message
 bot.start((ctx) => {
   ctx.reply('Halo! Kirim nama koin + "indodax", contoh:\n\nloom indodax');
 });
 
+// Handle pesan teks
 bot.on('text', async (ctx) => {
   const text = ctx.message.text.toLowerCase().trim();
   const [coin, source] = text.split(' ');
@@ -52,46 +49,77 @@ bot.on('text', async (ctx) => {
   }
 
   const pair = `${coin}_idr`;
+
   try {
     const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
-    const last = parseInt(res.data.ticker.last);
-    const high = parseInt(res.data.ticker.high);
-    const low = parseInt(res.data.ticker.low);
+    const lastPrice = parseInt(res.data.ticker.last);
 
-    // Update cache harga
+    // Simpan ke cache
     if (!cache[coin]) cache[coin] = [];
-    cache[coin].push(last);
-    if (cache[coin].length > 50) cache[coin] = cache[coin].slice(-50);
+    cache[coin].push(lastPrice);
+    if (cache[coin].length > 50) cache[coin].shift(); // Simpan max 50 data
 
     // Hitung indikator
-    const ma5 = calculateMA(cache[coin], 5);
-    const rsi = calculateRSI(cache[coin], 5);
+    const prices = cache[coin];
+    const rsi = calculateRSI(prices, 5);
+    const ma = calculateMA(prices, 5);
 
-    const buyZoneLow = Math.floor(ma5 * 0.94);
-    const buyZoneHigh = Math.floor(ma5 * 0.98);
-    const tp1 = Math.floor(ma5 * 1.05);
-    const tp2 = Math.floor(ma5 * 1.1);
-    const tp3 = Math.floor(ma5 * 1.15);
-    const sl = Math.floor(ma5 * 0.90);
+    // Hitung zona beli & target profit berdasarkan MA
+    const base = typeof ma === 'number' ? ma : lastPrice;
+    const buyZoneLow = Math.floor(base * 0.89);
+    const buyZoneHigh = Math.floor(base * 0.94);
+    const tp1 = Math.floor(base * 1.03);
+    const tp2 = Math.floor(base * 1.08);
+    const tp3 = Math.floor(base * 1.13);
+    const sl = Math.floor(base * 0.85);
 
-    let signal = '';
-    if (rsi < 30 && last >= buyZoneLow && last <= buyZoneHigh) {
-      signal = '✅ RSI rendah & harga di zona beli — saat yang bagus untuk masuk.';
+    let status = '';
+    if (typeof rsi === 'string') {
+      status = '⏳ Menunggu cukup data untuk analisis...';
+    } else if (lastPrice < sl) {
+      status = '📉 Status: Harga di bawah support, jangan beli dulu.';
+    } else if (rsi < 30 && lastPrice >= buyZoneLow && lastPrice <= buyZoneHigh) {
+      status = '✅ Status: Oversold dan di zona beli — bisa mulai cicil beli.';
     } else if (rsi > 70) {
-      signal = '⚠️ RSI tinggi — pasar overbought, hati-hati.';
-    } else if (last > buyZoneHigh) {
-      signal = '⚠️ Harga terlalu tinggi — tunggu koreksi.';
+      status = '⚠️ Status: Overbought, hindari membeli sekarang.';
+    } else if (lastPrice >= buyZoneLow && lastPrice <= buyZoneHigh) {
+      status = '✅ Status: Harga berada di zona beli.';
+    } else if (lastPrice > buyZoneHigh) {
+      status = '⚠️ Status: Harga di atas zona beli, tunggu koreksi.';
     } else {
-      signal = 'ℹ️ Tunggu sinyal lebih kuat — jangan buru-buru masuk.';
+      status = '⚠️ Status: Harga belum masuk zona beli.';
     }
 
-    const message = `📊 ANALISIS ${coin.toUpperCase()}/IDR\nHarga sekarang: ${last} IDR\n\n🧮 Indikator:\n- MA(5): ${ma5} IDR\n- RSI(5): ${rsi}\n\n📈 Zona Beli: ${buyZoneLow} – ${buyZoneHigh}\n❌ Stop Loss: < ${sl} IDR\n🎯 TP1: ${tp1}\n🎯 TP2: ${tp2}\n🎯 TP3: ${tp3}\n\n${signal}`;
+    const message = `📊 ANALISIS ${coin.toUpperCase()}/IDR\n` +
+      `Harga sekarang: ${formatNumber(lastPrice)} IDR\n\n` +
+      `🟦 Buy area: ${formatNumber(buyZoneLow)} – ${formatNumber(buyZoneHigh)} IDR\n` +
+      `❌ Stop Loss: < ${formatNumber(sl)} IDR\n` +
+      `🎯 Target Profit:\n- TP1: ${formatNumber(tp1)} IDR\n- TP2: ${formatNumber(tp2)} IDR\n- TP3: ${formatNumber(tp3)} IDR\n\n` +
+      `📈 MA (5): ${typeof ma === 'number' ? formatNumber(ma) : ma}\n` +
+      `📊 RSI (5): ${typeof rsi === 'number' ? rsi : rsi}\n\n` +
+      `${status}`;
 
     ctx.reply(message);
-  } catch (err) {
-    ctx.reply(`Koin \"${coin}\" tidak ditemukan di Indodax.`);
+  } catch (error) {
+    ctx.reply(`⚠️ Koin "${coin}" tidak ditemukan di Indodax.`);
   }
 });
 
+// Auto polling harga setiap 60 detik (biar cache cepat terisi)
+setInterval(async () => {
+  const coins = Object.keys(cache);
+  for (const coin of coins) {
+    const pair = `${coin}_idr`;
+    try {
+      const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
+      const lastPrice = parseInt(res.data.ticker.last);
+      cache[coin].push(lastPrice);
+      if (cache[coin].length > 50) cache[coin].shift();
+    } catch (err) {
+      console.log(`Gagal polling harga ${coin}:`, err.message);
+    }
+  }
+}, 60_000);
+
 bot.launch();
-console.log('Bot aktif dengan indikator MA & RSI...');
+console.log('🤖 Bot sedang berjalan...');
