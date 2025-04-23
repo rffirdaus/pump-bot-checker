@@ -70,7 +70,6 @@ function calculateMACD(closes, symbol, shortPeriod = 12, longPeriod = 26, signal
 }
 
 // Main function
-// Main function
 module.exports = async (req, res) => {
   try {
     const { data } = await axios.get('https://indodax.com/api/tickers');
@@ -90,19 +89,6 @@ module.exports = async (req, res) => {
       const sellPrice = parseFloat(ticker.sell);
       const spread = sellPrice - buyPrice;
       const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
-
-      // Get order depth for strong buy signal
-      const { data: depth } = await axios.get(`https://indodax.com/api/orderdepth/${symbol}`);
-      
-      // Check if depth.buy and depth.sell are valid and contain data
-      if (!depth.buy || !depth.sell || depth.buy.length === 0 || depth.sell.length === 0) {
-        console.log(`Invalid order depth data for ${symbol}`);
-        continue; // Skip this symbol if order depth is invalid
-      }
-
-      const totalBuy = depth.buy.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
-      const totalSell = depth.sell.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
-      const isStrongDemand = totalBuy > totalSell;
 
       if (!rsiData[symbol]) rsiData[symbol] = [];
       if (!maData[symbol]) maData[symbol] = [];
@@ -128,13 +114,27 @@ module.exports = async (req, res) => {
       );
       const probability = (pumpScore / 5) * 100;
 
+      // Ambil data order depth
+      const { data: depth } = await axios.get(`https://indodax.com/api/orderdepth/${symbol}`);
+      const totalBuy = depth.buy.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
+      const totalSell = depth.sell.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
+      const isStrongDemand = totalBuy > totalSell;
+
       // Sinyal beli kuat berdasarkan order depth
+      let strongBuySignal = '';
       if (isStrongDemand) {
-        let msg = `📡 *Koin dengan Permintaan Kuat!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
+        strongBuySignal = '💥 *Permintaan Tinggi! Layak Dibeli!*';
+      }
+
+      // Sinyal awal
+      if (pumpScore === 2) {
+        let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
 
         if (isMAcrossUp) msg += `\n📐 *MA Cross Up terdeteksi!*`;
         if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
-        msg += `\n\n⚠️ Permintaan beli lebih besar, sinyal beli sangat kuat. Waspadai potensi kenaikan harga!`;
+        msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
+
+        if (strongBuySignal) msg += `\n\n${strongBuySignal}`;
 
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
@@ -202,4 +202,3 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
