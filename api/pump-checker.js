@@ -90,6 +90,12 @@ module.exports = async (req, res) => {
       const spread = sellPrice - buyPrice;
       const coinName = symbol.replace('idr', '').toUpperCase() + '/IDR';
 
+      // Get order depth for strong buy signal
+      const { data: depth } = await axios.get(`https://indodax.com/api/orderdepth/${symbol}`);
+      const totalBuy = depth.buy.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
+      const totalSell = depth.sell.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
+      const isStrongDemand = totalBuy > totalSell;
+
       if (!rsiData[symbol]) rsiData[symbol] = [];
       if (!maData[symbol]) maData[symbol] = [];
       rsiData[symbol].push(lastPrice);
@@ -114,13 +120,13 @@ module.exports = async (req, res) => {
       );
       const probability = (pumpScore / 5) * 100;
 
-      // Sinyal awal
-      if (pumpScore === 2) {
-        let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
+      // Sinyal beli kuat berdasarkan order depth
+      if (isStrongDemand) {
+        let msg = `📡 *Koin dengan Permintaan Kuat!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
 
         if (isMAcrossUp) msg += `\n📐 *MA Cross Up terdeteksi!*`;
         if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
-        msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
+        msg += `\n\n⚠️ Permintaan beli lebih besar, sinyal beli sangat kuat. Waspadai potensi kenaikan harga!`;
 
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
