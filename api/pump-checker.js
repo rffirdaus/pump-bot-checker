@@ -105,36 +105,31 @@ module.exports = async (req, res) => {
       const macdData = calculateMACD(maData[symbol], symbol);
       const macd = macdData ? macdData.macd : 0;
 
-      const pumpScore = (
-        (changePercent >= 4 ? 1 : 0) +
-        (volumeSpike >= 70 ? 1 : 0) +
-        (rsi >= 65 ? 1 : 0) +
-        (isMAcrossUp ? 1 : 0) +
-        (macd > 0 ? 1 : 0)
-      );
-      const probability = (pumpScore / 5) * 100;
-
-      // Ambil data order depth
+      // Ambil data order book untuk cek strong demand
       const { data: depth } = await axios.get(`https://indodax.com/api/orderdepth/${symbol}`);
-      const totalBuy = depth.buy.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
-      const totalSell = depth.sell.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
-      const isStrongDemand = totalBuy > totalSell;
+      let totalBuy = 0;
+      let totalSell = 0;
 
-      // Sinyal beli kuat berdasarkan order depth
-      let strongBuySignal = '';
-      if (isStrongDemand) {
-        strongBuySignal = '💥 *Permintaan Tinggi! Layak Dibeli!*';
+      // Pastikan data buy dan sell ada
+      if (depth && depth.buy && depth.sell) {
+        totalBuy = depth.buy.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
+        totalSell = depth.sell.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
       }
 
+      const isStrongDemand = totalBuy > totalSell;
+
       // Sinyal awal
-      if (pumpScore === 2) {
+      if (changePercent >= 4 && volumeSpike >= 70 && rsi >= 65 && isMAcrossUp && macd > 0) {
         let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
 
         if (isMAcrossUp) msg += `\n📐 *MA Cross Up terdeteksi!*`;
         if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
-        msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
 
-        if (strongBuySignal) msg += `\n\n${strongBuySignal}`;
+        if (isStrongDemand) {
+          msg += `\n💥 *Permintaan tinggi: harga BUY lebih besar dari SELL!*`;
+        }
+
+        msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
 
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
@@ -142,14 +137,14 @@ module.exports = async (req, res) => {
       }
 
       // Pump terkonfirmasi
-      if (pumpScore >= 3) {
+      if (changePercent >= 5 && volumeSpike >= 70) {
         let msg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''}`;
 
         if (breakoutLevel) {
           msg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakoutLevel}*`;
         }
 
-        msg += `\n\n📊 *Skor Probabilitas Pump: ${probability.toFixed(0)}%*`;
+        msg += `\n\n📊 *Skor Probabilitas Pump: ${(changePercent + volumeSpike + rsi + macd + spread).toFixed(0)}%*`;
 
         let spreadRisk = '', rekomendasi = '';
         if (spread <= 50) {
@@ -164,26 +159,6 @@ module.exports = async (req, res) => {
         }
 
         msg += `\n\n📊 ${spreadRisk}\n${rekomendasi}`;
-
-        let tp1, tp2, tp3, sl;
-        if (probability >= 80) {
-          tp1 = Math.round(buyPrice * 1.05);
-          tp2 = Math.round(buyPrice * 1.10);
-          tp3 = Math.round(buyPrice * 1.15);
-          sl = Math.round(buyPrice * 0.95);
-        } else if (probability >= 60) {
-          tp1 = Math.round(buyPrice * 1.03);
-          tp2 = Math.round(buyPrice * 1.07);
-          tp3 = Math.round(buyPrice * 1.10);
-          sl = Math.round(buyPrice * 0.97);
-        } else {
-          tp1 = Math.round(buyPrice * 1.02);
-          tp2 = Math.round(buyPrice * 1.05);
-          tp3 = Math.round(buyPrice * 1.10);
-          sl = Math.round(buyPrice * 0.98);
-        }
-
-        msg += `\n\n🎯 *Strategi Trading:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP 2%: *${tp1}*\n- TP 5%: *${tp2}*\n- TP 10%: *${tp3}*`;
 
         for (const chatId of CHAT_IDS) {
           await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
