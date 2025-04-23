@@ -60,7 +60,18 @@ bot.on('text', async (ctx) => {
   const pair = `${coin}_idr`;
 
   try {
+    // Log untuk memastikan pair yang benar
+    console.log(`Mengambil data untuk pasangan: ${pair}`);
+
     const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
+
+    // Log untuk memastikan response data yang diterima
+    console.log('Response API:', res.data);
+
+    if (!res.data || !res.data.ticker) {
+      return ctx.reply(`⚠️ Data tidak ditemukan untuk koin "${coin}".`);
+    }
+
     const lastPrice = parseInt(res.data.ticker.last);
 
     // Simpan ke cache
@@ -126,9 +137,11 @@ bot.on('text', async (ctx) => {
 
     ctx.reply(message);
   } catch (error) {
+    console.error('Error:', error.message); // Menambahkan log error untuk mempermudah debug
     ctx.reply(`⚠️ Koin "${coin}" tidak ditemukan di Indodax.`);
   }
 });
+
 
 // Auto polling harga setiap 60 detik (biar cache cepat terisi)
 setInterval(async () => {
