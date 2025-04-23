@@ -47,12 +47,12 @@ async function getDepthChart(pair) {
   }
 }
 
-// Bot start message
+// Bot start
 bot.start((ctx) => {
   ctx.reply('Halo! Kirim nama koin + "indodax", contoh:\n\nloom indodax');
 });
 
-// Handle pesan teks
+// Handle pesan
 bot.on('text', async (ctx) => {
   const text = ctx.message.text.toLowerCase().trim();
   const [coin, source] = text.split(' ');
@@ -81,34 +81,26 @@ bot.on('text', async (ctx) => {
     const ma = calculateMA(prices, 5);
 
     const depth = await getDepthChart(pair);
-    let buyAlert = '';
-    let depthDominanceNote = '';
+    let buyAlert = '', dominance = '', alertStatus = '';
 
     if (depth) {
-      const buyOrders = depth.buy?.slice(0, 5) || [];
-      const sellOrders = depth.sell?.slice(0, 5) || [];
+      const buyOrders = depth.buy.slice(0, 10);
+      const sellOrders = depth.sell.slice(0, 10);
 
-      const totalBuyVolume = buyOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
-      const totalSellVolume = sellOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
+      const buyVolume = buyOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
+      const sellVolume = sellOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
 
-      const averageBuyPrice = totalBuyVolume > 0
-        ? buyOrders.reduce((acc, order) => acc + parseFloat(order[0]) * parseFloat(order[1]), 0) / totalBuyVolume
-        : 0;
+      dominance = buyVolume > sellVolume
+        ? '📉 Dominasi: Lebih banyak PEMBELI (buyer dominance)'
+        : '📈 Dominasi: Lebih banyak PENJUAL (seller dominance)';
 
-      // Dominasi depth chart
-      if (totalBuyVolume > totalSellVolume * 1.5) {
-        depthDominanceNote = `🟢 Depth dominasi beli: Volume beli jauh lebih besar dari jual.\n`;
-      } else if (totalSellVolume > totalBuyVolume * 1.5) {
-        depthDominanceNote = `🔴 Depth dominasi jual: Volume jual jauh lebih besar dari beli.\n`;
+      const totalBuyValue = buyOrders.reduce((acc, order) => acc + parseFloat(order[0]) * parseFloat(order[1]), 0);
+      const avgBuyPrice = totalBuyValue / buyVolume;
+
+      if (buyVolume > sellVolume && buyVolume > 100) {
+        buyAlert = `🚨 Pembeli besar terdeteksi di harga sekitar ${formatNumber(avgBuyPrice)} IDR`;
       } else {
-        depthDominanceNote = `⚖️ Depth seimbang: Tidak ada dominasi kuat dari sisi beli/jual.\n`;
-      }
-
-      // Deteksi pembeli besar
-      if (totalBuyVolume > 100) {
-        buyAlert = `🚨 Pembeli besar terdeteksi di harga sekitar ${formatNumber(averageBuyPrice)} IDR.`;
-      } else {
-        buyAlert = '⚠️ Tidak ada pembeli besar yang terdeteksi.';
+        buyAlert = '⚠️ Tidak ada pembeli besar dominan.';
       }
     } else {
       buyAlert = '⚠️ Data depth chart tidak tersedia.';
@@ -126,17 +118,23 @@ bot.on('text', async (ctx) => {
     if (typeof rsi === 'string') {
       status = '⏳ Menunggu cukup data untuk analisis...';
     } else if (lastPrice < sl) {
-      status = '📉 Status: Harga di bawah support, jangan beli dulu.';
+      status = '📉 Harga di bawah support, jangan beli dulu.';
     } else if (rsi < 30 && lastPrice >= buyZoneLow && lastPrice <= buyZoneHigh) {
-      status = '✅ Status: Oversold dan di zona beli — bisa mulai cicil beli.';
+      status = '✅ Oversold & di zona beli — bisa mulai cicil beli.';
     } else if (rsi > 70) {
-      status = '⚠️ Status: Overbought, hindari membeli sekarang.';
+      status = '⚠️ Overbought, hindari beli.';
     } else if (lastPrice >= buyZoneLow && lastPrice <= buyZoneHigh) {
-      status = '✅ Status: Harga berada di zona beli.';
+      status = '✅ Harga di zona beli.';
     } else if (lastPrice > buyZoneHigh) {
-      status = '⚠️ Status: Harga di atas zona beli, tunggu koreksi.';
+      status = '⚠️ Harga di atas zona beli, tunggu koreksi.';
     } else {
-      status = '⚠️ Status: Harga belum masuk zona beli.';
+      status = '⚠️ Harga belum masuk zona beli.';
+    }
+
+    if (status.includes('✅') && buyAlert.includes('Pembeli besar')) {
+      alertStatus = '\n🚀 **LAYAK BELI SEKARANG!**';
+    } else {
+      alertStatus = '\n⛔ **TUNGGU DULU, BELUM AMAN**';
     }
 
     const message = `📊 ANALISIS ${coin.toUpperCase()}/IDR\n` +
@@ -145,10 +143,10 @@ bot.on('text', async (ctx) => {
       `❌ Stop Loss: < ${formatNumber(sl)} IDR\n` +
       `🎯 Target Profit:\n- TP1: ${formatNumber(tp1)} IDR\n- TP2: ${formatNumber(tp2)} IDR\n- TP3: ${formatNumber(tp3)} IDR\n\n` +
       `📈 MA (5): ${typeof ma === 'number' ? formatNumber(ma) : ma}\n` +
-      `📊 RSI (5): ${typeof rsi === 'number' ? rsi : rsi}\n\n` +
-      `${status}\n\n${depthDominanceNote}${buyAlert}`;
+      `📊 RSI (5): ${typeof rsi === 'number' ? rsi : rsi}\n` +
+      `${dominance}\n${buyAlert}\n\n${status}${alertStatus}`;
 
-    ctx.reply(message);
+    ctx.reply(message, { parse_mode: 'Markdown' });
 
   } catch (error) {
     console.error('Error:', error.message);
@@ -156,7 +154,7 @@ bot.on('text', async (ctx) => {
   }
 });
 
-// Auto polling harga setiap 60 detik
+// Auto polling setiap 60 detik
 setInterval(async () => {
   const coins = Object.keys(cache);
   for (const coin of coins) {
@@ -173,4 +171,4 @@ setInterval(async () => {
 }, 60_000);
 
 bot.launch();
-console.log('🤖 Bot sedang berjalan...');
+console.log('🤖 Bot berjalan...');
