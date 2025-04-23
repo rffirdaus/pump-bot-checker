@@ -81,6 +81,10 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
+      if (changePercent < 9) {
+        continue; // Skip if the change is less than 9%
+      }
+
       const lastVolume = parseFloat(ticker.volume);
       const prevVolume = lastVolumes[symbol] || lastVolume;
       const volumeSpike = prevVolume > 0 ? ((lastVolume - prevVolume) / prevVolume) * 100 : 0;
