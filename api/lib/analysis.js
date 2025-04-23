@@ -1,5 +1,3 @@
-// Install dulu: npm install telegraf axios
-
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 
@@ -34,6 +32,17 @@ function formatNumber(num) {
   return new Intl.NumberFormat('id-ID').format(num);
 }
 
+// Ambil data depth chart
+async function getDepthChart(pair) {
+  try {
+    const res = await axios.get(`https://indodax.com/api/${pair}/depth`);
+    return res.data;
+  } catch (error) {
+    console.error(`Error fetching depth chart: ${error.message}`);
+    return null;
+  }
+}
+
 // Bot start message
 bot.start((ctx) => {
   ctx.reply('Halo! Kirim nama koin + "indodax", contoh:\n\nloom indodax');
@@ -63,6 +72,22 @@ bot.on('text', async (ctx) => {
     const prices = cache[coin];
     const rsi = calculateRSI(prices, 5);
     const ma = calculateMA(prices, 5);
+
+    // Ambil data depth chart
+    const depth = await getDepthChart(pair);
+    let buyAlert = '';
+    if (depth) {
+      const buyOrders = depth.bids.slice(0, 5); // Ambil 5 pembeli terbesar
+      const totalBuyVolume = buyOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
+      const averageBuyPrice = buyOrders.reduce((acc, order) => acc + parseFloat(order[0]) * parseFloat(order[1]), 0) / totalBuyVolume;
+
+      // Analisis apakah pembeli besar ada
+      if (totalBuyVolume > 100) { // Jika total volume pembeli lebih dari 100 IDR
+        buyAlert = `🚨 Pembeli besar terdeteksi di harga sekitar ${formatNumber(averageBuyPrice)} IDR. Ini mungkin sinyal untuk membeli.`;
+      } else {
+        buyAlert = '⚠️ Tidak ada pembeli besar yang terdeteksi.';
+      }
+    }
 
     // Hitung zona beli & target profit berdasarkan MA
     const base = typeof ma === 'number' ? ma : lastPrice;
@@ -97,7 +122,7 @@ bot.on('text', async (ctx) => {
       `🎯 Target Profit:\n- TP1: ${formatNumber(tp1)} IDR\n- TP2: ${formatNumber(tp2)} IDR\n- TP3: ${formatNumber(tp3)} IDR\n\n` +
       `📈 MA (5): ${typeof ma === 'number' ? formatNumber(ma) : ma}\n` +
       `📊 RSI (5): ${typeof rsi === 'number' ? rsi : rsi}\n\n` +
-      `${status}`;
+      `${status}\n\n${buyAlert}`;
 
     ctx.reply(message);
   } catch (error) {
