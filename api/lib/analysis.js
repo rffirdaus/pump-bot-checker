@@ -36,9 +36,13 @@ function formatNumber(num) {
 async function getDepthChart(pair) {
   try {
     const res = await axios.get(`https://indodax.com/api/${pair}/depth`);
-    return res.data;
+    if (res.data && res.data.bids) {
+      return res.data; // Kembalikan data depth chart jika ada
+    } else {
+      throw new Error('Data depth chart tidak ditemukan');
+    }
   } catch (error) {
-    console.error(`Error fetching depth chart: ${error.message}`);
+    console.error('Error fetching depth chart:', error.message);
     return null;
   }
 }
@@ -48,6 +52,7 @@ bot.start((ctx) => {
   ctx.reply('Halo! Kirim nama koin + "indodax", contoh:\n\nloom indodax');
 });
 
+// Handle pesan teks
 // Handle pesan teks
 bot.on('text', async (ctx) => {
   const text = ctx.message.text.toLowerCase().trim();
@@ -87,7 +92,7 @@ bot.on('text', async (ctx) => {
     // Ambil data depth chart
     const depth = await getDepthChart(pair);
     let buyAlert = '';
-    if (depth) {
+    if (depth && depth.bids) {
       const buyOrders = depth.bids.slice(0, 5); // Ambil 5 pembeli terbesar
       const totalBuyVolume = buyOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
       const averageBuyPrice = buyOrders.reduce((acc, order) => acc + parseFloat(order[0]) * parseFloat(order[1]), 0) / totalBuyVolume;
@@ -98,6 +103,8 @@ bot.on('text', async (ctx) => {
       } else {
         buyAlert = '⚠️ Tidak ada pembeli besar yang terdeteksi.';
       }
+    } else {
+      buyAlert = '⚠️ Data depth chart tidak tersedia.';
     }
 
     // Hitung zona beli & target profit berdasarkan MA
@@ -141,6 +148,7 @@ bot.on('text', async (ctx) => {
     ctx.reply(`⚠️ Koin "${coin}" tidak ditemukan di Indodax.`);
   }
 });
+
 
 
 // Auto polling harga setiap 60 detik (biar cache cepat terisi)
