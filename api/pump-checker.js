@@ -85,8 +85,6 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      // if (changePercent < 9) return;
-
       const lastVolume = parseFloat(ticker.volume);
       const prevVolume = lastVolumes[symbol] || lastVolume;
       const volumeSpike = prevVolume > 0 ? ((lastVolume - prevVolume) / prevVolume) * 100 : 0;
@@ -121,61 +119,63 @@ module.exports = async (req, res) => {
 
       const probability = (pumpScore / 5) * 100;
 
-      if (pumpScore === 2) {
-        let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
-
-        if (isMAcrossUp) msg += `\n📐 *MA Cross Up terdeteksi!*`;
-        if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
-        msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
-
-        await sendMessageToAllChats(msg);
-      }
-
-      if (pumpScore >= 3) {
-        let msg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''}`;
-
-        if (breakoutLevel) {
-          msg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakoutLevel}*`;
+      if (changePercent >= 9) {
+        if (pumpScore === 2) {
+          let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
+  
+          if (isMAcrossUp) msg += `\n📐 *MA Cross Up terdeteksi!*`;
+          if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
+          msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
+  
+          await sendMessageToAllChats(msg);
         }
-
-        msg += `\n\n📊 *Skor Probabilitas Pump: ${probability.toFixed(0)}%*`;
-
-        let spreadRisk = '', rekomendasi = '';
-        if (spread <= 50) {
-          spreadRisk = '🟢 *Risiko Rendah*';
-          rekomendasi = '✅ *Layak dibeli*';
-        } else if (spread <= 200) {
-          spreadRisk = '🟡 *Risiko Sedang*';
-          rekomendasi = '⚠️ *Hati-hati saat entry*';
-        } else {
-          spreadRisk = '🔴 *Risiko Tinggi*';
-          rekomendasi = '🚫 *Tidak disarankan entry*';
+  
+        if (pumpScore >= 3) {
+          let msg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''}`;
+  
+          if (breakoutLevel) {
+            msg += `\n📊 *BREAKOUT!* Harga melewati resistance sebelumnya di *${breakoutLevel}*`;
+          }
+  
+          msg += `\n\n📊 *Skor Probabilitas Pump: ${probability.toFixed(0)}%*`;
+  
+          let spreadRisk = '', rekomendasi = '';
+          if (spread <= 50) {
+            spreadRisk = '🟢 *Risiko Rendah*';
+            rekomendasi = '✅ *Layak dibeli*';
+          } else if (spread <= 200) {
+            spreadRisk = '🟡 *Risiko Sedang*';
+            rekomendasi = '⚠️ *Hati-hati saat entry*';
+          } else {
+            spreadRisk = '🔴 *Risiko Tinggi*';
+            rekomendasi = '🚫 *Tidak disarankan entry*';
+          }
+  
+          msg += `\n\n📊 ${spreadRisk}\n${rekomendasi}`;
+  
+          let tp1, tp2, tp3, sl;
+          if (probability >= 80) {
+            tp1 = Math.round(buyPrice * 1.05);
+            tp2 = Math.round(buyPrice * 1.10);
+            tp3 = Math.round(buyPrice * 1.15);
+            sl = Math.round(buyPrice * 0.95);
+          } else if (probability >= 60) {
+            tp1 = Math.round(buyPrice * 1.03);
+            tp2 = Math.round(buyPrice * 1.07);
+            tp3 = Math.round(buyPrice * 1.10);
+            sl = Math.round(buyPrice * 0.97);
+          } else {
+            tp1 = Math.round(buyPrice * 1.02);
+            tp2 = Math.round(buyPrice * 1.05);
+            tp3 = Math.round(buyPrice * 1.10);
+            sl = Math.round(buyPrice * 0.98);
+          }
+  
+          msg += `\n\n🎯 *Strategi Trading:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP 2%: *${tp1}*\n- TP 5%: *${tp2}*\n- TP 10%: *${tp3}*`;
+  
+          await sendMessageToAllChats(msg);
+          result.push(msg);
         }
-
-        msg += `\n\n📊 ${spreadRisk}\n${rekomendasi}`;
-
-        let tp1, tp2, tp3, sl;
-        if (probability >= 80) {
-          tp1 = Math.round(buyPrice * 1.05);
-          tp2 = Math.round(buyPrice * 1.10);
-          tp3 = Math.round(buyPrice * 1.15);
-          sl = Math.round(buyPrice * 0.95);
-        } else if (probability >= 60) {
-          tp1 = Math.round(buyPrice * 1.03);
-          tp2 = Math.round(buyPrice * 1.07);
-          tp3 = Math.round(buyPrice * 1.10);
-          sl = Math.round(buyPrice * 0.97);
-        } else {
-          tp1 = Math.round(buyPrice * 1.02);
-          tp2 = Math.round(buyPrice * 1.05);
-          tp3 = Math.round(buyPrice * 1.10);
-          sl = Math.round(buyPrice * 0.98);
-        }
-
-        msg += `\n\n🎯 *Strategi Trading:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP 2%: *${tp1}*\n- TP 5%: *${tp2}*\n- TP 10%: *${tp3}*`;
-
-        await sendMessageToAllChats(msg);
-        result.push(msg);
       }
 
       lastPrices[symbol] = lastPrice;
