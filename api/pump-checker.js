@@ -70,6 +70,7 @@ function calculateMACD(closes, symbol, shortPeriod = 12, longPeriod = 26, signal
 }
 
 // Main function
+// Main function
 module.exports = async (req, res) => {
   try {
     const { data } = await axios.get('https://indodax.com/api/tickers');
@@ -92,6 +93,13 @@ module.exports = async (req, res) => {
 
       // Get order depth for strong buy signal
       const { data: depth } = await axios.get(`https://indodax.com/api/orderdepth/${symbol}`);
+      
+      // Check if depth.buy and depth.sell are valid and contain data
+      if (!depth.buy || !depth.sell || depth.buy.length === 0 || depth.sell.length === 0) {
+        console.log(`Invalid order depth data for ${symbol}`);
+        continue; // Skip this symbol if order depth is invalid
+      }
+
       const totalBuy = depth.buy.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
       const totalSell = depth.sell.reduce((acc, [price, vol]) => acc + parseFloat(vol), 0);
       const isStrongDemand = totalBuy > totalSell;
@@ -194,3 +202,4 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
