@@ -1,7 +1,7 @@
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 
-const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw'); // ganti dengan token asli
+const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw'); // Ganti dengan token asli
 
 const cache = {}; // Simpan histori harga tiap koin
 
@@ -36,12 +36,11 @@ function formatNumber(num) {
 async function getDepthChart(pair) {
   try {
     const res = await axios.get(`https://indodax.com/api/${pair}/depth`);
-    console.log(res, 'siniii')
-    // if (res.data && res.data.bids) {
-    //   return res.data; // Kembalikan data depth chart jika ada
-    // } else {
-    //   throw new Error('Data depth chart tidak ditemukan');
-    // }
+    if (res.data) {
+      return res.data;
+    } else {
+      throw new Error('Data depth chart tidak ditemukan');
+    }
   } catch (error) {
     console.error('Error fetching depth chart:', error.message);
     return null;
@@ -54,7 +53,6 @@ bot.start((ctx) => {
 });
 
 // Handle pesan teks
-// Handle pesan teks
 bot.on('text', async (ctx) => {
   const text = ctx.message.text.toLowerCase().trim();
   const [coin, source] = text.split(' ');
@@ -66,13 +64,7 @@ bot.on('text', async (ctx) => {
   const pair = `${coin}_idr`;
 
   try {
-    // Log untuk memastikan pair yang benar
-    console.log(`Mengambil data untuk pasangan: ${pair}`);
-
     const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
-
-    // Log untuk memastikan response data yang diterima
-    console.log('Response API:', res.data);
 
     if (!res.data || !res.data.ticker) {
       return ctx.reply(`⚠️ Data tidak ditemukan untuk koin "${coin}".`);
@@ -80,27 +72,41 @@ bot.on('text', async (ctx) => {
 
     const lastPrice = parseInt(res.data.ticker.last);
 
-    // Simpan ke cache
     if (!cache[coin]) cache[coin] = [];
     cache[coin].push(lastPrice);
-    if (cache[coin].length > 50) cache[coin].shift(); // Simpan max 50 data
+    if (cache[coin].length > 50) cache[coin].shift();
 
-    // Hitung indikator
     const prices = cache[coin];
     const rsi = calculateRSI(prices, 5);
     const ma = calculateMA(prices, 5);
 
-    // Ambil data depth chart
     const depth = await getDepthChart(pair);
     let buyAlert = '';
-    if (depth && depth.bids) {
-      const buyOrders = depth.bids.slice(0, 5); // Ambil 5 pembeli terbesar
-      const totalBuyVolume = buyOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
-      const averageBuyPrice = buyOrders.reduce((acc, order) => acc + parseFloat(order[0]) * parseFloat(order[1]), 0) / totalBuyVolume;
+    let depthDominanceNote = '';
 
-      // Analisis apakah pembeli besar ada
-      if (totalBuyVolume > 100) { // Jika total volume pembeli lebih dari 100 IDR
-        buyAlert = `🚨 Pembeli besar terdeteksi di harga sekitar ${formatNumber(averageBuyPrice)} IDR. Ini mungkin sinyal untuk membeli.`;
+    if (depth) {
+      const buyOrders = depth.buy?.slice(0, 5) || [];
+      const sellOrders = depth.sell?.slice(0, 5) || [];
+
+      const totalBuyVolume = buyOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
+      const totalSellVolume = sellOrders.reduce((acc, order) => acc + parseFloat(order[1]), 0);
+
+      const averageBuyPrice = totalBuyVolume > 0
+        ? buyOrders.reduce((acc, order) => acc + parseFloat(order[0]) * parseFloat(order[1]), 0) / totalBuyVolume
+        : 0;
+
+      // Dominasi depth chart
+      if (totalBuyVolume > totalSellVolume * 1.5) {
+        depthDominanceNote = `🟢 Depth dominasi beli: Volume beli jauh lebih besar dari jual.\n`;
+      } else if (totalSellVolume > totalBuyVolume * 1.5) {
+        depthDominanceNote = `🔴 Depth dominasi jual: Volume jual jauh lebih besar dari beli.\n`;
+      } else {
+        depthDominanceNote = `⚖️ Depth seimbang: Tidak ada dominasi kuat dari sisi beli/jual.\n`;
+      }
+
+      // Deteksi pembeli besar
+      if (totalBuyVolume > 100) {
+        buyAlert = `🚨 Pembeli besar terdeteksi di harga sekitar ${formatNumber(averageBuyPrice)} IDR.`;
       } else {
         buyAlert = '⚠️ Tidak ada pembeli besar yang terdeteksi.';
       }
@@ -108,7 +114,6 @@ bot.on('text', async (ctx) => {
       buyAlert = '⚠️ Data depth chart tidak tersedia.';
     }
 
-    // Hitung zona beli & target profit berdasarkan MA
     const base = typeof ma === 'number' ? ma : lastPrice;
     const buyZoneLow = Math.floor(base * 0.89);
     const buyZoneHigh = Math.floor(base * 0.94);
@@ -141,18 +146,17 @@ bot.on('text', async (ctx) => {
       `🎯 Target Profit:\n- TP1: ${formatNumber(tp1)} IDR\n- TP2: ${formatNumber(tp2)} IDR\n- TP3: ${formatNumber(tp3)} IDR\n\n` +
       `📈 MA (5): ${typeof ma === 'number' ? formatNumber(ma) : ma}\n` +
       `📊 RSI (5): ${typeof rsi === 'number' ? rsi : rsi}\n\n` +
-      `${status}\n\n${buyAlert}`;
+      `${status}\n\n${depthDominanceNote}${buyAlert}`;
 
     ctx.reply(message);
+
   } catch (error) {
-    console.error('Error:', error.message); // Menambahkan log error untuk mempermudah debug
+    console.error('Error:', error.message);
     ctx.reply(`⚠️ Koin "${coin}" tidak ditemukan di Indodax.`);
   }
 });
 
-
-
-// Auto polling harga setiap 60 detik (biar cache cepat terisi)
+// Auto polling harga setiap 60 detik
 setInterval(async () => {
   const coins = Object.keys(cache);
   for (const coin of coins) {
