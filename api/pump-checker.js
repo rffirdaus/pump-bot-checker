@@ -11,7 +11,6 @@ let rsiData = {};
 let maData = {};
 let macdHistory = {};
 
-// EMA helper
 function calculateEMA(data, period) {
   const k = 2 / (period + 1);
   let emaArray = [data[0]];
@@ -21,7 +20,6 @@ function calculateEMA(data, period) {
   return emaArray;
 }
 
-// RSI
 function calculateRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
   let gains = 0, losses = 0;
@@ -37,14 +35,12 @@ function calculateRSI(closes, period = 14) {
   return 100 - (100 / (1 + rs));
 }
 
-// MA
 function calculateMA(data, period = 9) {
   if (data.length < period) return null;
   const slice = data.slice(-period);
   return slice.reduce((acc, val) => acc + val, 0) / period;
 }
 
-// Breakout
 function detectBreakout(closes) {
   if (closes.length < 20) return null;
   const recentHigh = Math.max(...closes.slice(-20, -1));
@@ -52,7 +48,6 @@ function detectBreakout(closes) {
   return latest > recentHigh ? recentHigh : null;
 }
 
-// MACD
 function calculateMACD(closes, symbol, shortPeriod = 12, longPeriod = 26, signalPeriod = 9) {
   if (closes.length < longPeriod + signalPeriod) return null;
 
@@ -69,7 +64,16 @@ function calculateMACD(closes, symbol, shortPeriod = 12, longPeriod = 26, signal
   return { macd: latestMACD, signal: latestSignal };
 }
 
-// Main function
+async function sendMessageToAllChats(message) {
+  for (const chatId of CHAT_IDS) {
+    try {
+      await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (err) {
+      console.error(`Failed to send message to chat ${chatId}:`, err.message);
+    }
+  }
+}
+
 module.exports = async (req, res) => {
   try {
     const { data } = await axios.get('https://indodax.com/api/tickers');
@@ -81,9 +85,7 @@ module.exports = async (req, res) => {
       const prevPrice = lastPrices[symbol] || lastPrice;
       const changePercent = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-      if (changePercent < 9) {
-        continue; // Skip if the change is less than 9%
-      }
+      if (changePercent < 9) continue;
 
       const lastVolume = parseFloat(ticker.volume);
       const prevVolume = lastVolumes[symbol] || lastVolume;
@@ -116,9 +118,9 @@ module.exports = async (req, res) => {
         (isMAcrossUp ? 1 : 0) +
         (macd > 0 ? 1 : 0)
       );
+
       const probability = (pumpScore / 5) * 100;
 
-      // Sinyal awal
       if (pumpScore === 2) {
         let msg = `📡 *Koin Mendekati Pump!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*`;
 
@@ -126,12 +128,9 @@ module.exports = async (req, res) => {
         if (breakoutLevel) msg += `\n📊 *Level breakout di* ${breakoutLevel}`;
         msg += `\n\n⚠️ Belum ada konfirmasi penuh, tapi ada indikasi awal.\nPantau terus dan siapkan strategi.`;
 
-        for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
-        }
+        await sendMessageToAllChats(msg);
       }
 
-      // Pump terkonfirmasi
       if (pumpScore >= 3) {
         let msg = `🚀 *PUMP TERDETEKSI!*\n\n🪙 *${coinName}*\n💰 Harga: *${lastPrice}*\n📈 Kenaikan: *${changePercent.toFixed(2)}%*\n📊 Volume: *${volumeSpike.toFixed(2)}%*\n📐 RSI: *${rsi?.toFixed(2) || '-'}*\n📉 Spread: *${spread}*\n📐 MA9: *${ma9?.toFixed(2)}*, MA21: *${ma21?.toFixed(2)}*${isMAcrossUp ? ' (📈 MA CROSS UP)' : ''}`;
 
@@ -175,10 +174,7 @@ module.exports = async (req, res) => {
 
         msg += `\n\n🎯 *Strategi Trading:*\n- Entry: < *${buyPrice}*\n- SL: *${sl}*\n- TP 2%: *${tp1}*\n- TP 5%: *${tp2}*\n- TP 10%: *${tp3}*`;
 
-        for (const chatId of CHAT_IDS) {
-          await bot.sendMessage(chatId, msg, { parse_mode: "Markdown" });
-        }
-
+        await sendMessageToAllChats(msg);
         result.push(msg);
       }
 
