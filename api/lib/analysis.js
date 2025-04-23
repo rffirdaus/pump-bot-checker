@@ -36,11 +36,12 @@ function formatNumber(num) {
 async function getDepthChart(pair) {
   try {
     const res = await axios.get(`https://indodax.com/api/${pair}/depth`);
-    if (res.data && res.data.bids) {
-      return res.data; // Kembalikan data depth chart jika ada
-    } else {
-      throw new Error('Data depth chart tidak ditemukan');
-    }
+    console.log(res, 'siniii')
+    // if (res.data && res.data.bids) {
+    //   return res.data; // Kembalikan data depth chart jika ada
+    // } else {
+    //   throw new Error('Data depth chart tidak ditemukan');
+    // }
   } catch (error) {
     console.error('Error fetching depth chart:', error.message);
     return null;
