@@ -1,11 +1,61 @@
 const { Telegraf } = require('telegraf');
+const fetch = require('node-fetch');
+const sharp = require('sharp');
 const axios = require('axios');
 
-const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw'); // Ganti dengan token asli
+// Bot Token
+const bot = new Telegraf('7531708117:AAG8zzE8TEGrS05Qq385g_8L0MBtiE6BdIw');
 
-const cache = {}; // Simpan histori harga tiap koin
+// Cache harga untuk analisa
+const cache = {};
 
-// Hitung Moving Average
+// ============ ✨ Fungsi Edit Foto Cinematic ============
+async function downloadPhoto(fileId) {
+  const fileLink = await bot.telegram.getFileLink(fileId);
+  const res = await fetch(fileLink.href);
+  const buffer = await res.buffer();
+  return buffer;
+}
+
+async function applyCinematicEffect(buffer) {
+  const image = sharp(buffer);
+  const metadata = await image.metadata();
+
+  // Color grading
+  const graded = await image
+    .modulate({
+      brightness: 0.95,
+      saturation: 1.2,
+      hue: 10
+    })
+    .linear(1.1, -10)
+    .toBuffer();
+
+  // Cinematic black bars
+  const blackBarHeight = Math.floor(metadata.width * 0.1);
+  const topBar = Buffer.from(
+    `<svg width="${metadata.width}" height="${blackBarHeight}">
+      <rect width="100%" height="100%" fill="black"/>
+    </svg>`
+  );
+  const bottomBar = Buffer.from(
+    `<svg width="${metadata.width}" height="${blackBarHeight}">
+      <rect width="100%" height="100%" fill="black"/>
+    </svg>`
+  );
+
+  const finalImage = await sharp(graded)
+    .composite([
+      { input: topBar, top: 0, left: 0 },
+      { input: bottomBar, top: metadata.height - blackBarHeight, left: 0 }
+    ])
+    .toBuffer();
+
+  return finalImage;
+}
+
+// ============ 📈 Fungsi Analisis Crypto ============
+
 function calculateMA(data, period = 5) {
   if (!data || data.length < period) return '🔄 (menunggu data)';
   const recent = data.slice(-period);
@@ -13,7 +63,6 @@ function calculateMA(data, period = 5) {
   return Math.floor(sum / period);
 }
 
-// Hitung RSI sederhana
 function calculateRSI(prices, period = 5) {
   if (!prices || prices.length < period + 1) return '🔄 (menunggu data)';
   let gains = 0, losses = 0;
@@ -27,32 +76,37 @@ function calculateRSI(prices, period = 5) {
   return Math.floor(100 - 100 / (1 + rs));
 }
 
-// Format angka
 function formatNumber(num) {
   return new Intl.NumberFormat('id-ID').format(num);
 }
 
-// Ambil data depth chart
 async function getDepthChart(pair) {
   try {
     const res = await axios.get(`https://indodax.com/api/${pair}/depth`);
-    if (res.data) {
-      return res.data;
-    } else {
-      throw new Error('Data depth chart tidak ditemukan');
-    }
+    return res.data;
   } catch (error) {
     console.error('Error fetching depth chart:', error.message);
     return null;
   }
 }
 
-// Bot start
-bot.start((ctx) => {
-  ctx.reply('Halo! Kirim nama koin + "indodax", contoh:\n\nloom indodax');
+// ============ 🚀 Event Handling ============
+
+// User kirim foto
+bot.on('photo', async (ctx) => {
+  try {
+    const fileId = ctx.message.photo.pop().file_id;
+    const originalImage = await downloadPhoto(fileId);
+    const editedImage = await applyCinematicEffect(originalImage);
+
+    await ctx.replyWithPhoto({ source: editedImage }, { caption: '🎬 Sudah diubah jadi foto bergaya cinematic!' });
+  } catch (err) {
+    console.error('❌ Error edit foto:', err);
+    ctx.reply('Oops! Gagal mengedit foto.');
+  }
 });
 
-// Handle pesan
+// User kirim teks
 bot.on('text', async (ctx) => {
   const text = ctx.message.text.toLowerCase().trim();
   const [coin, source] = text.split(' ');
@@ -65,13 +119,11 @@ bot.on('text', async (ctx) => {
 
   try {
     const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
-
     if (!res.data || !res.data.ticker) {
       return ctx.reply(`⚠️ Data tidak ditemukan untuk koin "${coin}".`);
     }
 
     const lastPrice = parseInt(res.data.ticker.last);
-
     if (!cache[coin]) cache[coin] = [];
     cache[coin].push(lastPrice);
     if (cache[coin].length > 50) cache[coin].shift();
@@ -149,26 +201,11 @@ bot.on('text', async (ctx) => {
     ctx.reply(message, { parse_mode: 'Markdown' });
 
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Error analysis:', error.message);
     ctx.reply(`⚠️ Koin "${coin}" tidak ditemukan di Indodax.`);
   }
 });
 
-// Auto polling setiap 60 detik
-setInterval(async () => {
-  const coins = Object.keys(cache);
-  for (const coin of coins) {
-    const pair = `${coin}_idr`;
-    try {
-      const res = await axios.get(`https://indodax.com/api/${pair}/ticker`);
-      const lastPrice = parseInt(res.data.ticker.last);
-      cache[coin].push(lastPrice);
-      if (cache[coin].length > 50) cache[coin].shift();
-    } catch (err) {
-      console.log(`Gagal polling harga ${coin}:`, err.message);
-    }
-  }
-}, 60_000);
-
+// ============ 🏁 Mulai Bot ============
 bot.launch();
-console.log('🤖 Bot berjalan...');
+console.log('🤖 Bot berjalan... Siap menerima foto atau teks!');

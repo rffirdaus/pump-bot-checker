@@ -13,35 +13,39 @@ async function downloadPhoto(fileId, bot) {
   return buffer;
 }
 
-// Generate SVG gradien dari 2 warna dengan opasitas halus
-function generateGradientSvg(primary, secondary, width, height) {
-  return Buffer.from(`
-    <svg width="${width}" height="${height}">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${primary}" stop-opacity="0.2"/>
-          <stop offset="100%" stop-color="${secondary}" stop-opacity="0.4"/>
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#g)" />
-    </svg>
-  `);
-}
-
-// Proses gambar + tambah gradien tanpa resize
-async function applyGradient(buffer) {
-  // Tidak ada resizing, tetap pakai ukuran asli gambar
+// Proses gambar dengan efek cinematic
+async function applyCinematicEffect(buffer) {
   const image = sharp(buffer);
   const metadata = await image.metadata();
 
-  const primary = '#FF7F50';  // Warna utama (Coral, warna lembut)
-  const secondary = '#98FB98';  // Warna sekunder (Pale Green)
+  // 1. Color grading (sedikit lebih warm & contrast)
+  const graded = await image
+    .modulate({
+      brightness: 0.95, // sedikit gelapin
+      saturation: 1.2,   // lebih vivid
+      hue: 10            // kasih tone agak warm
+    })
+    .linear(1.1, -10)    // tingkatkan kontras
+    .toBuffer();
 
-  const gradient = generateGradientSvg(primary, secondary, metadata.width, metadata.height);
+  // 2. Tambah cinematic black bars (letterbox)
+  const blackBarHeight = Math.floor(metadata.width * 0.1); // 10% tinggi untuk black bar
+  const topBar = Buffer.from(
+    `<svg width="${metadata.width}" height="${blackBarHeight}">
+      <rect width="100%" height="100%" fill="black"/>
+    </svg>`
+  );
+  const bottomBar = Buffer.from(
+    `<svg width="${metadata.width}" height="${blackBarHeight}">
+      <rect width="100%" height="100%" fill="black"/>
+    </svg>`
+  );
 
-  // Terapkan gradien pada gambar tanpa mengubah ukuran
-  const finalImage = await image
-    .composite([{ input: gradient, blend: 'overlay' }])
+  const finalImage = await sharp(graded)
+    .composite([
+      { input: topBar, top: 0, left: 0 },
+      { input: bottomBar, top: metadata.height - blackBarHeight, left: 0 }
+    ])
     .toBuffer();
 
   return finalImage;
@@ -52,14 +56,15 @@ bot.on('photo', async (ctx) => {
   try {
     const fileId = ctx.message.photo.pop().file_id;
     const originalImage = await downloadPhoto(fileId, bot);
-    const editedImage = await applyGradient(originalImage);
+    const editedImage = await applyCinematicEffect(originalImage);
 
-    await ctx.replyWithPhoto({ source: editedImage }, { caption: '✨ Sudah dikasih sentuhan gradien yang lebih natural!' });
+    await ctx.replyWithPhoto({ source: editedImage }, { caption: '🎬 Sudah diubah jadi foto bergaya cinematic!' });
   } catch (err) {
     console.error('❌ Error:', err);
     ctx.reply('Oops! Gagal mengedit foto.');
   }
 });
 
+// Mulai bot
 bot.launch();
-console.log('🤖 Bot aktif! Kirim foto ke bot untuk melihat efek gradien otomatis.');
+console.log('🤖 Bot aktif! Kirim foto ke bot untuk melihat efek cinematic otomatis.');
